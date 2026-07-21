@@ -1,10 +1,10 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from '../../shared/js/config.js';
-import { weddingForm, corporateForm, privateForm } from '../../shared/js/modules.js?v=7010';
+import { weddingForm, corporateForm, privateForm } from '../../shared/js/modules.js?v=7020';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 const app=document.querySelector('#clientApp');
-const VERSION='7.0.1';
+const VERSION='7.0.2';
 let user=null,events=[],activeTab='events';
 const esc=v=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 const fmt=d=>d?new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',year:'numeric'}).format(new Date(`${d}T12:00:00`)):'Date pending';
