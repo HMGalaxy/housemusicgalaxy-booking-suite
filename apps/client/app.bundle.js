@@ -22,7 +22,7 @@ function privateForm() {
 // apps/client/app.js
 var supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
 var app = document.querySelector("#clientApp");
-var VERSION = "7.1.0";
+var VERSION = "7.1.1";
 var user = null;
 var events = [];
 var activeTab = "events";
@@ -43,7 +43,7 @@ function authScreen(msg = "") {
       <div class="client-auth-ambient client-auth-ambient-two"></div>
       <section class="client-login-card" aria-labelledby="clientLoginTitle">
         <div class="client-login-brand">
-          <img src="../../assets/galaxy-cue-mark-transparent.png" alt="Galaxy Cue">
+          <img src="assets/galaxy-cue-mark-transparent.png" alt="Galaxy Cue">
           <strong>GALAXY <span>CUE</span></strong>
         </div>
         <div class="client-login-rule"><i></i></div>
@@ -119,7 +119,7 @@ async function render() {
   }
   events = data || [];
   const business = events[0]?.businesses?.name || "Your Entertainment Company";
-  app.innerHTML = `<div class="portal-shell"><header class="portal-topbar"><div class="portal-brand"><img src="../../assets/galaxy-cue-logo.png"><div><strong>GALAXY CUE</strong><span>Client Portal \xB7 v${VERSION}</span></div></div><button class="btn ghost" id="signout">Sign Out</button></header><main class="portal-main"><nav class="client-tabs"><button class="${activeTab === "events" ? "active" : ""}" data-tab="events">My Events</button><button class="${activeTab === "new" ? "active" : ""}" data-tab="new">\uFF0B Book a New Event</button></nav>${activeTab === "events" ? `<section class="hero"><div><div class="eyebrow">${esc(business)}</div><h1>Your Events</h1><p>Complete required actions and keep every event in one place.</p></div></section><section class="panel"><div class="event-list">${events.length ? events.map(eventCard).join("") : '<div class="empty"><h3>No events yet</h3><p>Use Book a New Event to send your first request.</p></div>'}</div></section>` : newEventView(business)}</main></div>`;
+  app.innerHTML = `<div class="portal-shell"><header class="portal-topbar"><div class="portal-brand"><img src="assets/galaxy-cue-logo.png"><div><strong>GALAXY CUE</strong><span>Client Portal \xB7 v${VERSION}</span></div></div><button class="btn ghost" id="signout">Sign Out</button></header><main class="portal-main"><nav class="client-tabs"><button class="${activeTab === "events" ? "active" : ""}" data-tab="events">My Events</button><button class="${activeTab === "new" ? "active" : ""}" data-tab="new">\uFF0B Book a New Event</button></nav>${activeTab === "events" ? `<section class="hero"><div><div class="eyebrow">${esc(business)}</div><h1>Your Events</h1><p>Complete required actions and keep every event in one place.</p></div></section><section class="panel"><div class="event-list">${events.length ? events.map(eventCard).join("") : '<div class="empty"><h3>No events yet</h3><p>Use Book a New Event to send your first request.</p></div>'}</div></section>` : newEventView(business)}</main></div>`;
   bind();
 }
 function newEventView(business) {

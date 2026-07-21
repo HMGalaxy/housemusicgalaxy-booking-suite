@@ -1,4 +1,4 @@
-# Galaxy Cue v7.1.0 architecture
+# Galaxy Cue v7.1.1 architecture
 
 ## Application entry points
 
