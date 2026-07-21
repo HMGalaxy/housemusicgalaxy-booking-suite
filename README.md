@@ -1,38 +1,22 @@
-# Galaxy Cue — Step 1 Foundation
+# Galaxy Cue OS v8.0.0
 
-This repository is the clean foundation for the Galaxy Cue platform.
+A separated three-application foundation for platform administrators, entertainment businesses and clients.
 
-## Applications
+## Deploy to GitHub Pages
 
-- `apps/admin/` — Galaxy Cue Admin OS
-- `apps/business/` — Galaxy Cue Business OS
-- `apps/client/` — Galaxy Cue Client App
+Upload the **contents of this folder** to the repository root. Configure Pages to deploy from `main` and `/ (root)`.
 
-## Shared platform code
+## Application URLs
 
-- `shared/css/` — design tokens and global styles
-- `shared/js/` — shared browser utilities
-- `shared/components/` — reusable UI components
-- `shared/assets/` — shared images and icons
+- Admin: `apps/admin/`
+- Business: `apps/business/`
+- Client: `apps/client/`
+- Launcher: `platform.html`
 
-## Feature modules
+## Supabase
 
-Modules are separated by domain under `modules/`:
+The existing Supabase project is retained. Add this redirect pattern in Authentication URL Configuration:
 
-- events
-- clients
-- quotes
-- contracts
-- planning
-- timeline
-- calendar
-- workflow
+`https://hmgalaxy.github.io/housemusicgalaxy-booking-suite/**`
 
-## GitHub Pages
-
-Set GitHub Pages to deploy from:
-
-- Branch: `main`
-- Folder: `/ (root)`
-
-The root `index.html` redirects to the Business OS.
+Run the existing v7.0.4 admin access SQL only if Admin access has not already been configured.
