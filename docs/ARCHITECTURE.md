@@ -1,9 +1,12 @@
-# Galaxy Cue Architecture
+# Galaxy Cue v7 Architecture
 
-Galaxy Cue is divided into three independent interfaces backed by one shared platform:
+```text
+Galaxy Cue Platform
+├── Admin OS      runs the SaaS platform
+├── Business OS   runs an entertainment company
+└── Client App    manages client events
+        │
+        └── Shared Supabase backend and event workflow
+```
 
-1. Admin OS — platform administration and developer operations.
-2. Business OS — entertainment-company operations.
-3. Client App — client event booking and planning.
-
-The applications share visual tokens and reusable browser utilities, while feature logic is organized by domain under `modules/`.
+The v7.0 foundation changes physical boundaries without rewriting the proven feature logic. Features will be migrated from shared legacy modules into domain modules incrementally, keeping each release usable.

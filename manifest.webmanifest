@@ -1,0 +1,30 @@
+{
+  "name": "Galaxy Cue",
+  "short_name": "Galaxy Cue",
+  "description": "Operating system for DJs and entertainment companies",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#16181c",
+  "theme_color": "#16181c",
+  "icons": [
+    {
+      "src": "assets/galaxy-cue-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/galaxy-cue-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/galaxy-cue-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "stages": [
+    "booking_request",
+    "business_accepts",
+    "event_workbook",
+    "quote",
+    "contract",
+    "planning_music",
+    "timeline",
+    "event_ready",
+    "event_complete"
+  ]
+}

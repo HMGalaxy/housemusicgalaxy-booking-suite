@@ -1,0 +1,9 @@
+{
+  "types": [
+    "dj",
+    "entertainment_company",
+    "venue",
+    "planner",
+    "production_company"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "platform_owner": [
+    "platform:*"
+  ],
+  "business_owner": [
+    "business:*"
+  ],
+  "staff": [
+    "events:read",
+    "events:update"
+  ],
+  "client": [
+    "own_events:read",
+    "own_events:update"
+  ]
+}
