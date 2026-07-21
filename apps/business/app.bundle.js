@@ -3419,7 +3419,7 @@ async function bindGlobalActions() {
   }));
   document.querySelectorAll('[data-action="command"]').forEach((b) => b.addEventListener("click", openCommand));
   document.querySelectorAll('[data-action="client-login"]').forEach((button) => button.addEventListener("click", () => {
-    const url = new URL("client-portal.html", window.location.href);
+    const url = new URL("../client/", window.location.href);
     if (activeBusinessId()) url.searchParams.set("business", activeBusinessId());
     window.open(url.toString(), "_blank", "noopener");
   }));

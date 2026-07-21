@@ -4,7 +4,7 @@ import { weddingForm, corporateForm, privateForm } from '../../shared/js/modules
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 const app=document.querySelector('#clientApp');
-const VERSION='7.0.5';
+const VERSION='7.1.0';
 let user=null,events=[],activeTab='events';
 const esc=v=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 const fmt=d=>d?new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',year:'numeric'}).format(new Date(`${d}T12:00:00`)):'Date pending';
