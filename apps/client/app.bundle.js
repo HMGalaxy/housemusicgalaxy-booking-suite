@@ -22,7 +22,7 @@ function privateForm() {
 // apps/client/app.js
 var supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
 var app = document.querySelector("#clientApp");
-var VERSION = "7.1.1";
+var VERSION = "8.0.0";
 var user = null;
 var events = [];
 var activeTab = "events";

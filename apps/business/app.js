@@ -581,6 +581,9 @@ function closeLeadReview(){document.querySelector('#leadReviewModal')?.remove()}
 function openLeadReview(id){const r=bookingRequests.find(x=>x.id===id);if(!r)return;closeLeadReview();const modal=document.createElement('div');modal.id='leadReviewModal';modal.className='modal';modal.innerHTML=`<div class="modal-panel lead-review-panel"><button class="modal-close" data-close-lead aria-label="Close">×</button><div class="eyebrow">Booking Request</div><h2>${escapeHtml(r.client_name||'Unnamed request')}</h2><div class="lead-review-grid"><div><small>Contact</small><strong>${escapeHtml(r.client_email||'—')}</strong><span>${escapeHtml(r.client_phone||'No phone')}</span></div><div><small>Event</small><strong>${escapeHtml(r.event_type||'—')}</strong><span>${escapeHtml(formatEventDate(r.event_date))}</span></div><div><small>Venue</small><strong>${escapeHtml(r.venue_name||'Not provided')}</strong><span>${escapeHtml(r.venue_city||'')}</span></div><div><small>Guests</small><strong>${escapeHtml(String(r.guest_count||'Not provided'))}</strong><span>${escapeHtml((r.services||[]).join(', ')||'No services selected')}</span></div></div><section class="lead-review-message"><small>Client message</small><p>${escapeHtml(r.message||'No additional message.')}</p></section>${r.decision_note?`<section class="lead-review-message"><small>Organization note</small><p>${escapeHtml(r.decision_note)}</p></section>`:''}<div class="lead-actions modal-lead-actions">${r.status!=='accepted'&&r.status!=='declined'?`<button class="btn primary" data-modal-lead-action="accept">Accept & Create Event</button><button class="btn" data-modal-lead-action="info">Need More Info</button><button class="btn danger" data-modal-lead-action="decline">Decline</button>`:`<span class="status-chip ${statusTone(r.status)}">${escapeHtml(requestStatusLabel(r.status))}</span>`}</div></div>`;document.body.appendChild(modal);modal.querySelector('[data-close-lead]').addEventListener('click',closeLeadReview);modal.addEventListener('click',e=>{if(e.target===modal)closeLeadReview()});modal.querySelectorAll('[data-modal-lead-action]').forEach(button=>button.addEventListener('click',async()=>{const action=button.dataset.modalLeadAction;if(action==='accept'){closeLeadReview();return convertLeadToEvent(id)}if(action==='decline'){const reason=prompt('Optional decline reason:')||'';if(await setLeadStatus(id,'declined',{decision_note:reason})){closeLeadReview();shell()}}if(action==='info'){const note=prompt('What additional information is needed?')||'';if(!note)return;if(await setLeadStatus(id,'needs_info',{decision_note:note})){closeLeadReview();shell()}}}));}
 function bindLeadActions(){document.querySelectorAll('[data-lead-action]').forEach(b=>b.addEventListener('click',async()=>{const {leadAction,leadId}=b.dataset;if(leadAction==='review')return openLeadReview(leadId);if(leadAction==='accept')return convertLeadToEvent(leadId)}));document.querySelector('[data-copy-booking-link]')?.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(bookingRequestShareUrl());toast('Booking request link copied')}catch{prompt('Copy this booking link:',bookingRequestShareUrl())}})}
 
+function versionCheckBox(label='Verified build'){
+  return `<span class="gc-version-check" title="${label}: ${escapeHtml(galaxyCueRuntime.build)}"><i>✓</i><span>v${escapeHtml(galaxyCueRuntime.version)}</span></span>`;
+}
 function shell(){document.querySelector('#app').innerHTML=`<div class="crm-shell">
 <header class="topbar crm-topbar">
   <button class="mobile-menu-toggle" type="button" data-action="toggle-mobile-menu" aria-label="Open navigation" aria-expanded="false"><span></span><span></span><span></span></button>
@@ -594,7 +597,7 @@ function shell(){document.querySelector('#app').innerHTML=`<div class="crm-shell
     <div class="cloud-status ${currentUser?'online':'offline'}"><span></span>${currentUser?escapeHtml(currentUser.email||'Signed in'):'Local mode'}</div>
     <button class="btn compact" data-action="client-login">Client Login</button>
     <button class="btn compact account-button" data-action="${currentUser?'logout':'login'}">${currentUser?'Sign Out':'Business Login'}</button>
-    <button class="status-pill version-indicator" type="button" data-action="force-refresh" title="Build ${escapeHtml(galaxyCueRuntime.build)} · Click to clear cache and reload">GALAXY CUE · v${escapeHtml(galaxyCueRuntime.version)}</button>
+    <button class="status-pill version-indicator" type="button" data-action="force-refresh" title="Build ${escapeHtml(galaxyCueRuntime.build)} · Click to clear cache and reload">✓&nbsp; v${escapeHtml(galaxyCueRuntime.version)}</button>
   </div>
 </header>
 <div class="mobile-nav-backdrop" data-action="close-mobile-menu"></div>
@@ -755,86 +758,66 @@ function dashboardStats(){
 async function renderDashboard(){
   const main=document.querySelector('#main');
   main.innerHTML=`<div class="dashboard-loading">Loading your command center…</div>`;
-
-  if(currentUser&&activeBusinessId()){
-    await refreshCoreCloudData();
-  }
+  if(currentUser&&activeBusinessId()) await refreshCoreCloudData();
   await refreshBookingRequests();
 
   const now=new Date();
+  const startToday=new Date(now.getFullYear(),now.getMonth(),now.getDate());
   const today=cloudBookings.filter(event=>isSameCalendarDay(eventDateValue(event),now));
-  const upcoming=cloudBookings
-    .filter(event=>eventDateValue(event)&&eventDateValue(event)>=new Date(now.getFullYear(),now.getMonth(),now.getDate()))
-    .sort((a,b)=>String(a.event_date).localeCompare(String(b.event_date)));
-  const recentClients=[...crmClients]
-    .sort((a,b)=>String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||'')))
-    .slice(0,5);
-  const pending=cloudBookings.filter(event=>!String(event.status||'').toLowerCase().match(/accepted|confirmed|paid|complete|cancel/));
+  const upcoming=cloudBookings.filter(event=>eventDateValue(event)&&eventDateValue(event)>=startToday).sort((a,b)=>String(a.event_date).localeCompare(String(b.event_date)));
+  const recentClients=[...crmClients].sort((a,b)=>String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||''))).slice(0,5);
+  const newLeads=bookingRequests.filter(r=>r.status==='new'||r.status==='needs_info');
+  const quoteNeeded=cloudBookings.filter(e=>/draft|pending|new/i.test(String(e.status||'draft')));
+  const contractWaiting=cloudBookings.filter(e=>/quote|contract/i.test(String(e.status||'')));
+  const planning=cloudBookings.filter(e=>/planning|accepted|confirmed/i.test(String(e.status||'')));
+  const ready=cloudBookings.filter(e=>/ready|paid|complete/i.test(String(e.status||'')));
   const next=upcoming[0]||null;
+  const taskCount=newLeads.length+quoteNeeded.length+contractWaiting.length;
 
-  main.innerHTML=`<section class="dash-hero">
-    <div><div class="eyebrow">Galaxy Cue CRM</div><h1>${greeting()}.</h1><p>${currentUser?`${upcoming.length} upcoming event${upcoming.length===1?'':'s'} and ${crmClients.length} client${crmClients.length===1?'':'s'} are connected to this workspace.`:'Sign in to load your business workspace.'}</p></div>
-    <div class="hero-actions"><button class="btn primary" data-action="new-booking">＋ New Event</button><button class="btn" data-action="new-dashboard-client">＋ New Client</button></div>
+  const workflow=[
+    ['Booking Requests',newLeads.length,'Review new inquiries','bookings','01'],
+    ['Quote Needed',quoteNeeded.length,'Prepare pricing and package','quotes','02'],
+    ['Contract Waiting',contractWaiting.length,'Follow up on approvals','contracts','03'],
+    ['Planning',planning.length,'Music, details and timeline','music','04'],
+    ['Event Ready',ready.length,'Confirmed and ready to perform','bookings','05']
+  ];
+  const activities=[];
+  bookingRequests.slice(0,3).forEach(r=>activities.push({time:r.updated_at||r.created_at,title:`Booking request from ${r.client_name||'a new client'}`,detail:r.event_type||'New inquiry',icon:'↗'}));
+  cloudBookings.slice(0,4).forEach(e=>activities.push({time:e.updated_at,title:`${e.client_name||'Client'} · ${e.event_type||'Event'}`,detail:`Status: ${e.status||'Draft'}`,icon:'◇'}));
+  crmClients.slice(0,2).forEach(c=>activities.push({time:c.updatedAt||c.createdAt,title:`Client profile updated`,detail:c.name||c.company||'Client',icon:'♙'}));
+  activities.sort((a,b)=>String(b.time||'').localeCompare(String(a.time||'')));
+
+  main.innerHTML=`<section class="v8-command-hero">
+    <div class="v8-welcome"><div class="eyebrow">Galaxy Cue Business OS</div><h1>${greeting()}, ${escapeHtml(currentUser?.user_metadata?.full_name?.split(' ')[0]||currentUser?.email?.split('@')[0]||'there')}.</h1><p>Here is what needs your attention and what is happening across your events.</p></div>
+    <div class="v8-hero-actions"><button class="btn primary" data-action="new-booking">＋ New Event</button><button class="btn" data-action="new-dashboard-client">＋ New Client</button>${versionCheckBox('Business OS verified')}</div>
   </section>
 
-  <section class="lead-intake-panel"><div class="section-title"><div><small>Lead Intake</small><h2>New Booking Requests</h2></div><button class="btn compact" data-copy-booking-link>Copy Public Booking Link</button></div><div class="lead-request-list">${bookingRequests.filter(r=>r.status==='new'||r.status==='needs_info').length?bookingRequests.filter(r=>r.status==='new'||r.status==='needs_info').map(bookingRequestCard).join(''):`<div class="empty-state">No pending booking requests. Share your public booking link to receive one.</div>`}</div></section>
-
-  <section class="kpi-grid">
-    ${kpi('Today',today.length,today.length?'Events scheduled':'No events today','calendar')}
-    ${kpi('Upcoming Events',upcoming.length,'Cloud event records','month')}
-    ${kpi('Clients',crmClients.length,'Connected profiles','cloud')}
-    ${kpi('Need Attention',pending.length,'Draft or pending','quote')}
+  <section class="v8-kpis">
+    <button data-view="calendar"><span>Today</span><strong>${today.length}</strong><small>${today.length?'scheduled event'+(today.length===1?'':'s'):'Clear schedule'}</small></button>
+    <button data-view="bookings"><span>Upcoming</span><strong>${upcoming.length}</strong><small>confirmed and pending</small></button>
+    <button data-view="quotes"><span>Pending Quotes</span><strong>${quoteNeeded.length}</strong><small>need a decision</small></button>
+    <button data-view="messages"><span>Needs Attention</span><strong>${taskCount}</strong><small>actions across workspace</small></button>
   </section>
 
-  <section class="dashboard-grid crm-dashboard-v42">
-    <div class="lux-card wide">
-      <div class="section-title"><div><small>Schedule</small><h2>${today.length?'Today’s Events':'Upcoming Events'}</h2></div><button class="text-button" data-view="bookings">View all →</button></div>
-      <div class="event-list">${(today.length?today:upcoming).length?(today.length?today:upcoming).slice(0,6).map(bookingRow).join(''):`<div class="empty-state">No scheduled events yet.</div>`}</div>
-    </div>
+  <section class="v8-notice-bar ${taskCount?'active':''}"><div><span class="v8-bell">${taskCount?'●':'✓'}</span><div><strong>${taskCount?`${taskCount} item${taskCount===1?'':'s'} need your attention`:'You are all caught up'}</strong><small>${newLeads.length?`${newLeads.length} booking request${newLeads.length===1?'':'s'} · `:''}${quoteNeeded.length} quote${quoteNeeded.length===1?'':'s'} in progress</small></div></div><button class="text-button" data-view="bookings">Open Action Center →</button></section>
 
-    <div class="lux-card next-event">
-      <small>Next Event</small>
-      ${next?`<div class="next-date">${formatEventDate(next.event_date)}</div><h2>${escapeHtml(next.client_name||'Unnamed Client')}</h2><p>${escapeHtml(eventTypeLabel(next.event_type))}</p><div class="next-meta"><span>${escapeHtml(next.venue_name||'Venue not set')}</span><span class="status-chip ${statusTone(next.status)}">${escapeHtml(next.status||'Draft')}</span></div><button class="btn primary full" data-open-booking="${next.booking_ref}">Open Event</button>`:`<div class="empty-state">Your next event will appear here.</div>`}
-    </div>
+  <section class="v8-section"><div class="v8-section-head"><div><small>Action Center</small><h2>Event Workflow</h2></div><span>Move work forward, one stage at a time.</span></div><div class="v8-workflow-grid">${workflow.map(([label,count,desc,view,num],i)=>`<button class="v8-workflow-card" data-view="${view}"><div><span>${num}</span><i>${count}</i></div><h3>${label}</h3><p>${desc}</p><footer>${i<workflow.length-1?'Continue workflow →':'Review ready events →'}</footer></button>`).join('')}</div></section>
 
-    <div class="lux-card">
-      <div class="section-title"><div><small>Relationships</small><h2>Recent Clients</h2></div><button class="text-button" data-view="clients">View all →</button></div>
-      <div class="recent-client-list">${recentClients.length?recentClients.map(client=>{
-        const stats=clientTimelineStats(client);
-        return `<button data-dashboard-client="${client.id}"><span class="client-initial">${escapeHtml((client.name||client.company||'?').trim().charAt(0).toUpperCase())}</span><span><strong>${escapeHtml(client.name||client.company||'Unnamed Client')}</strong><small>${stats.events.length} event${stats.events.length===1?'':'s'}${stats.next?` · Next ${formatEventDate(stats.next.event_date)}`:''}</small></span><span>→</span></button>`;
-      }).join(''):'<div class="empty-state compact">No clients yet.</div>'}</div>
-    </div>
+  <section class="v8-dashboard-grid">
+    <article class="v8-panel v8-schedule"><div class="v8-panel-head"><div><small>Schedule</small><h2>${today.length?'Today’s Events':'Upcoming Events'}</h2></div><button class="text-button" data-view="calendar">Calendar →</button></div><div class="event-list">${(today.length?today:upcoming).length?(today.length?today:upcoming).slice(0,5).map(bookingRow).join(''):`<div class="empty-state">No scheduled events yet.</div>`}</div></article>
 
-    <div class="lux-card">
-      <div class="section-title"><div><small>Quick Actions</small><h2>Start Work</h2></div></div>
-      <div class="dashboard-action-grid">
-        <button data-action="new-booking"><strong>＋ Event</strong><small>Create and link a new event</small></button>
-        <button data-action="new-dashboard-client"><strong>＋ Client</strong><small>Add a CRM profile</small></button>
-        <button data-view="calendar"><strong>◫ Calendar</strong><small>Review the schedule</small></button>
-        <button data-view="bookings"><strong>⌕ Search</strong><small>Find any event</small></button>
-      </div>
-    </div>
-  </section>`;
+    <article class="v8-panel v8-next"><div class="v8-panel-head"><div><small>Next Up</small><h2>Next Event</h2></div></div>${next?`<div class="v8-next-date"><strong>${shortDay(next.event_date)}</strong><span>${shortMonth(next.event_date)}</span></div><h3>${escapeHtml(next.client_name||'Unnamed Client')}</h3><p>${escapeHtml(next.event_type||'Event')} · ${escapeHtml(next.venue_name||'Venue pending')}</p><span class="status-chip ${statusTone(next.status)}">${escapeHtml(next.status||'Draft')}</span><button class="btn primary full" data-open-booking="${next.booking_ref}">Open Event Workspace</button>`:`<div class="empty-state">Your next event will appear here.</div>`}</article>
 
-  bindDashboardActions();
-  bindLeadActions();
-  document.querySelectorAll('[data-action="new-dashboard-client"]').forEach(button=>button.addEventListener('click',()=>{
-    selectedClientId=null;
-    appView='clients';
-    shell();
-    requestAnimationFrame(()=>{
-      const panel=document.querySelector('.booking-preview-panel');
-      if(panel){
-        panel.innerHTML=clientEditor();
-        bindClientEditor();
-      }
-    });
-  }));
-  document.querySelectorAll('[data-dashboard-client]').forEach(button=>button.addEventListener('click',()=>{
-    selectedClientId=button.dataset.dashboardClient;
-    appView='clients';
-    shell();
-  }));
+    <article class="v8-panel"><div class="v8-panel-head"><div><small>Live Updates</small><h2>Activity Feed</h2></div><span class="v8-live">● Live</span></div><div class="v8-activity">${activities.length?activities.slice(0,7).map(a=>`<div><i>${a.icon}</i><span><strong>${escapeHtml(a.title)}</strong><small>${escapeHtml(a.detail)}${a.time?` · ${new Date(a.time).toLocaleDateString()}`:''}</small></span></div>`).join(''):'<div class="empty-state compact">Activity will appear as your team works.</div>'}</div></article>
+
+    <article class="v8-panel"><div class="v8-panel-head"><div><small>Relationships</small><h2>Client Profiles</h2></div><button class="text-button" data-view="clients">All Clients →</button></div><div class="v8-client-list">${recentClients.length?recentClients.map(client=>{const stats=clientTimelineStats(client);return `<button data-dashboard-client="${client.id}"><span class="client-initial">${escapeHtml((client.name||client.company||'?').trim().charAt(0).toUpperCase())}</span><span><strong>${escapeHtml(client.name||client.company||'Unnamed Client')}</strong><small>${stats.events.length} event${stats.events.length===1?'':'s'}${stats.next?` · Next ${shortMonth(stats.next.event_date)} ${shortDay(stats.next.event_date)}`:''}</small></span><em>Open →</em></button>`}).join(''):'<div class="empty-state compact">No clients yet.</div>'}</div></article>
+  </section>
+
+  <section class="lead-intake-panel v8-leads"><div class="section-title"><div><small>Lead Intake</small><h2>New Booking Requests</h2></div><button class="btn compact" data-copy-booking-link>Copy Public Booking Link</button></div><div class="lead-request-list">${newLeads.length?newLeads.map(bookingRequestCard).join(''):`<div class="empty-state">No pending booking requests.</div>`}</div></section>`;
+
+  bindDashboardActions(); bindLeadActions();
+  document.querySelectorAll('[data-action="new-dashboard-client"]').forEach(button=>button.addEventListener('click',()=>{selectedClientId=null;appView='clients';shell();requestAnimationFrame(()=>{const panel=document.querySelector('.booking-preview-panel');if(panel){panel.innerHTML=clientEditor();bindClientEditor();}})}));
+  document.querySelectorAll('[data-dashboard-client]').forEach(button=>button.addEventListener('click',()=>{selectedClientId=button.dataset.dashboardClient;appView='clients';shell();}));
 }
 function kpi(label,value,caption,kind){return `<div class="kpi-card ${kind}"><div class="kpi-icon">${kind==='calendar'?'◷':kind==='quote'?'$':kind==='month'?'◫':'☁'}</div><small>${label}</small><strong>${value}</strong><span>${caption}</span></div>`}
 function bookingRow(b){return `<button class="event-row" data-open-booking="${b.booking_ref}"><div class="event-date"><strong>${shortDay(b.event_date)}</strong><span>${shortMonth(b.event_date)}</span></div><div class="event-copy"><strong>${escapeHtml(b.client_name||'Unnamed Client')}</strong><span>${escapeHtml(eventTypeLabel(b.event_type))} · ${escapeHtml(b.venue_name||'Venue not set')}</span></div><span class="status-chip ${statusTone(b.status)}">${escapeHtml(b.status||'Draft')}</span><span class="row-arrow">→</span></button>`}
@@ -892,23 +875,15 @@ function clientCard(client,selectedId){
 }
 function clientPreview(client){
   const stats=clientTimelineStats(client);
-  return `<div class="preview-eyebrow">Client Profile</div><h2>${escapeHtml(client.name||client.company||'Unnamed Client')}</h2><p>${escapeHtml(client.company||'Private client')}</p>
-  <div class="preview-grid">
-    <div><small>Email</small><strong>${escapeHtml(client.email||'Not set')}</strong></div>
-    <div><small>Phone</small><strong>${escapeHtml(client.phone||'Not set')}</strong></div>
-    <div><small>Total events</small><strong>${stats.events.length}</strong></div>
-    <div><small>Next event</small><strong>${stats.next?formatEventDate(stats.next.event_date):'None scheduled'}</strong></div>
-    <div><small>Last event</small><strong>${stats.last?formatEventDate(stats.last.event_date):'No past events'}</strong></div>
-    <div><small>Updated</small><strong>${new Date(client.updatedAt||client.createdAt).toLocaleDateString()}</strong></div>
-  </div>
-  ${client.notes?`<div class="client-notes"><small>Notes</small><p>${escapeHtml(client.notes)}</p></div>`:''}
-  <div class="client-event-timeline">
-    <div class="section-title"><div><small>Timeline</small><h3>Linked Events</h3></div></div>
-    ${stats.events.length?stats.events.slice(0,8).map(event=>`<button data-open-booking="${event.booking_ref}"><span><strong>${escapeHtml(event.event_type||'Event')}</strong><small>${escapeHtml(event.venue_name||'Venue not set')}</small></span><span>${formatEventDate(event.event_date)} →</span></button>`).join(''):'<div class="empty-state compact">No linked events yet.</div>'}
-  </div>
-  <button class="btn primary full" data-edit-client="${client.id}">Edit Client</button>
-  <button class="btn full preview-secondary" data-client-event="${client.id}">Create Event for Client</button>
-  <button class="text-button danger-text" data-delete-client="${client.id}">Delete client</button>`;
+  const initials=(client.name||client.company||'?').split(/\s+/).map(x=>x[0]).join('').slice(0,2).toUpperCase();
+  const next=stats.next;
+  return `<section class="v8-client-profile"><header><div class="v8-client-avatar">${escapeHtml(initials)}</div><div><div class="preview-eyebrow">Client Profile</div><h2>${escapeHtml(client.name||client.company||'Unnamed Client')}</h2><p>${escapeHtml(client.company||'Private client')}</p></div><span class="v8-profile-status">Active</span></header>
+  <div class="v8-profile-actions"><button class="btn primary" data-client-event="${client.id}">＋ New Event</button><button class="btn" data-edit-client="${client.id}">Edit Profile</button></div>
+  <div class="v8-profile-kpis"><div><small>Total Events</small><strong>${stats.events.length}</strong></div><div><small>Next Event</small><strong>${next?shortMonth(next.event_date)+' '+shortDay(next.event_date):'—'}</strong></div><div><small>Last Event</small><strong>${stats.last?shortMonth(stats.last.event_date)+' '+shortDay(stats.last.event_date):'—'}</strong></div></div>
+  <div class="preview-grid v8-contact-grid"><div><small>Email</small><strong>${escapeHtml(client.email||'Not set')}</strong></div><div><small>Phone</small><strong>${escapeHtml(client.phone||'Not set')}</strong></div><div><small>Updated</small><strong>${new Date(client.updatedAt||client.createdAt).toLocaleDateString()}</strong></div><div><small>Next Venue</small><strong>${escapeHtml(next?.venue_name||'None scheduled')}</strong></div></div>
+  ${client.notes?`<div class="client-notes"><small>Internal Notes</small><p>${escapeHtml(client.notes)}</p></div>`:''}
+  <div class="client-event-timeline"><div class="section-title"><div><small>History</small><h3>Event Timeline</h3></div></div>${stats.events.length?stats.events.slice(0,8).map(event=>`<button data-open-booking="${event.booking_ref}"><span><strong>${escapeHtml(event.event_type||'Event')}</strong><small>${escapeHtml(event.venue_name||'Venue not set')}</small></span><span>${formatEventDate(event.event_date)} →</span></button>`).join(''):'<div class="empty-state compact">No linked events yet.</div>'}</div>
+  <button class="text-button danger-text" data-delete-client="${client.id}">Delete client</button></section>`;
 }
 function clientEditor(c={id:'',name:'',company:'',email:'',phone:'',notes:''}){
   return `<form id="clientEditor" class="client-editor"><div class="preview-eyebrow">${c.id?'Edit Client':'New Client'}</div><h2>${c.id?'Update profile':'Create client'}</h2>
