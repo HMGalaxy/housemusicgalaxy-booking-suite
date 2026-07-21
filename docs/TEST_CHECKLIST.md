@@ -1,7 +1,7 @@
-# v7.0.2 Test Checklist
+# v7.0.3 Test Checklist
 
 - [ ] Root URL redirects to Business OS.
-- [ ] Business OS displays v7.0.2 and loads existing data.
+- [ ] Business OS displays v7.0.3 and loads existing data.
 - [ ] `/apps/admin/` loads Admin OS and magic-link authentication.
 - [ ] `/apps/client/` loads the premium Client App login.
 - [ ] Legacy `/admin.html`, `/business.html`, and `/client-portal.html` redirect correctly.

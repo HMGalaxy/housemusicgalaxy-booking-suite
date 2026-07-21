@@ -93,15 +93,40 @@ async function adminCheck() {
   }
   return !!data;
 }
-function login(message = "") {
+function login(message = "", type = "") {
   root.className = "";
-  root.innerHTML = `<main class="login-shell"><section class="login-card"><div class="brand"><img src="assets/galaxy-cue-mark-transparent.png" alt="Galaxy Cue"><div><div class="eyebrow">Platform Administration</div><h1>Galaxy Cue Admin OS</h1></div></div><p class="muted">Developer and platform operations only. Business event management belongs in Business OS.</p>${message ? `<div class="notice">${esc(message)}</div>` : ""}<form id="loginForm"><label>Email</label><input type="email" name="email" required autocomplete="email" placeholder="developer@galaxycue.com"><button class="btn primary">Email secure admin link</button></form><p class="muted">Access requires an active record in <code>platform_admins</code>.</p></section></main>`;
+  root.innerHTML = `<main class="login-shell"><section class="login-card"><div class="brand"><img src="assets/galaxy-cue-mark-transparent.png" alt="Galaxy Cue"><div><div class="eyebrow">Platform Administration</div><h1>Galaxy Cue Admin OS</h1></div></div><p class="muted">Secure platform access for Galaxy Cue owners and developers.</p>${message ? `<div class="notice ${esc(type)}">${esc(message)}</div>` : ""}<form id="loginForm"><label for="adminEmail">Administrator email</label><input id="adminEmail" type="email" name="email" required autocomplete="email" inputmode="email" placeholder="name@company.com"><button class="btn primary">Send secure admin link</button></form><p class="helper">The email link signs you in. Your account must also be activated in <code>platform_admins</code>.</p></section></main>`;
   document.querySelector("#loginForm").addEventListener("submit", async (e) => {
     e.preventDefault();
+    const button = e.currentTarget.querySelector("button");
+    button.disabled = true;
+    button.textContent = "Sending\u2026";
     const email = new FormData(e.currentTarget).get("email");
     const { error } = await sendMagicLink(email);
-    login(error ? error.message : `Secure link sent to ${email}.`);
+    login(error ? error.message : `Secure link sent to ${email}. Open the newest email on this device.`, error ? "error" : "success");
   });
+}
+function accessRequired() {
+  const sql = `insert into public.platform_admins (user_id, role, status)
+values ('${user.id}', 'owner', 'active')
+on conflict (user_id) do update
+set role = excluded.role, status = 'active', updated_at = now();`;
+  root.className = "";
+  root.innerHTML = `<main class="login-shell"><section class="login-card"><div class="brand"><img src="assets/galaxy-cue-mark-transparent.png" alt="Galaxy Cue"><div><div class="eyebrow">Authentication successful</div><h1>Admin access not activated</h1></div></div><div class="notice success">The secure email link worked and you are signed in.</div><div class="access-panel"><h2>Activate this account once in Supabase</h2><p class="muted">Run the SQL below in <strong>Supabase \u2192 SQL Editor</strong>. It uses the exact signed-in user ID.</p><div class="access-meta"><div><span class="helper">Signed-in email</span><code>${esc(user.email || "Unknown")}</code></div><div><span class="helper">Auth user ID</span><code>${esc(user.id)}</code></div></div><div class="sql-box"><pre id="adminSql">${esc(sql)}</pre></div><div class="inline-actions"><button class="btn primary" id="copySql">Copy activation SQL</button><button class="btn" id="checkAgain">Check access again</button><button class="btn" id="logoutAccess">Sign out</button></div></div></section></main>`;
+  document.querySelector("#copySql").onclick = async (e) => {
+    await navigator.clipboard.writeText(sql);
+    e.currentTarget.textContent = "SQL copied";
+  };
+  document.querySelector("#checkAgain").onclick = async () => {
+    isAdmin = await adminCheck();
+    if (isAdmin) return render();
+    accessRequired();
+  };
+  document.querySelector("#logoutAccess").onclick = async () => {
+    await signOut();
+    user = null;
+    login();
+  };
 }
 async function safeCount(table2) {
   const { count, error } = await supabase.from(table2).select("*", { count: "exact", head: true });
@@ -127,7 +152,7 @@ function shell(content) {
 async function render() {
   const data = await loadData();
   const counts = { businesses: await safeCount("businesses"), clients: await safeCount("clients"), events: await safeCount("events"), requests: await safeCount("booking_requests") };
-  const head = `<header class="topbar"><div><div class="eyebrow">Galaxy Cue Platform</div><h1>${view[0].toUpperCase() + view.slice(1)}</h1><p class="muted">Signed in as ${esc(user.email)}</p></div><span class="pill">v7.0.2</span></header>${data.errors.length ? '<div class="notice">Some platform data could not be read. Run the v7 platform migration and verify admin permissions.</div>' : ""}`;
+  const head = `<header class="topbar"><div><div class="eyebrow">Galaxy Cue Platform</div><h1>${view[0].toUpperCase() + view.slice(1)}</h1><p class="muted">Signed in as ${esc(user.email)}</p></div><span class="pill">v7.0.3</span></header>${data.errors.length ? '<div class="notice">Some platform data could not be read. Run the v7 platform migration and verify admin permissions.</div>' : ""}`;
   if (view === "dashboard") return shell(head + `<section class="cards"><div class="card metric"><small>Entertainment Companies</small><strong>${counts.businesses}</strong></div><div class="card metric"><small>Clients</small><strong>${counts.clients}</strong></div><div class="card metric"><small>Events</small><strong>${counts.events}</strong></div><div class="card metric"><small>Booking Requests</small><strong>${counts.requests}</strong></div></section><section class="section card"><h2>Platform boundaries</h2><p class="muted">Admin OS manages the Galaxy Cue platform. Business OS manages entertainment companies. Client App manages client-facing event collaboration.</p></section>`);
   if (view === "businesses") return shell(head + table("Businesses", ["Name", "Booking handle", "Created"], data.businesses.map((x) => [x.name, x.slug, new Date(x.created_at).toLocaleDateString()])));
   if (view === "users") return shell(head + `<section class="cards"><div class="card metric"><small>Business users</small><strong>Managed by memberships</strong></div><div class="card metric"><small>Client records</small><strong>${counts.clients}</strong></div></section>` + table("Recent clients", ["Client", "Email", "Business ID"], data.clients.map((x) => [x.name, x.email, x.business_id])));
@@ -143,6 +168,6 @@ function table(title, heads, rows) {
   user = restored.user;
   if (!user) return login(restored.error?.message || "");
   isAdmin = await adminCheck();
-  if (!isAdmin) return login("This account is signed in but is not authorized for Galaxy Cue Admin OS.");
+  if (!isAdmin) return accessRequired();
   render();
 })();
