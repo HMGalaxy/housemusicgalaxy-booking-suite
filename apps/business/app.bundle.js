@@ -418,7 +418,7 @@ var storage = {
   }
 };
 
-// shared/js/core/bootstrap.js?v=7030
+// shared/js/core/bootstrap.js?v=7040
 var VERSION = "7.0.2";
 var RELEASE = "Event Activation \u2014 Client Form Connected";
 var BUILD = "2026-07-21T03:45:00Z";
@@ -433,7 +433,7 @@ function bootstrapGalaxyCue() {
   return runtime;
 }
 
-// shared/js/core/workflow.js?v=7030
+// shared/js/core/workflow.js?v=7040
 var WORKFLOW_VERSION = 1;
 var WORKFLOW_STATES = Object.freeze({
   BOOKING_REQUEST_RECEIVED: { order: 1, owner: "organization", label: "Booking Request Received", ec: "Review the new booking request and send the Event Form.", client: "Your booking request was received.", nextAction: "Send Event Form" },
@@ -534,7 +534,7 @@ var ACTION_LABELS = Object.freeze({
   return_planning: "Return for Changes"
 });
 
-// shared/js/modules.js?v=7030
+// shared/js/modules.js?v=7040
 var modules = [
   { id: "wedding", label: "Wedding Consultation", description: "Venue, schedule and production details.", icon: "\u2665", status: "ready" },
   { id: "corporate", label: "Corporate Consultation", description: "Business-event requirements.", icon: "\u25A3", status: "ready" },

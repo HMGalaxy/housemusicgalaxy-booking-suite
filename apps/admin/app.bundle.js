@@ -86,12 +86,19 @@ var isAdmin = false;
 var esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 async function adminCheck() {
   if (!user) return false;
-  const { data, error } = await supabase.from("platform_admins").select("user_id,role,status").eq("user_id", user.id).eq("status", "active").maybeSingle();
-  if (error) {
-    console.error(error);
+  const rpc = await supabase.rpc("get_my_platform_access");
+  if (!rpc.error) {
+    const row = Array.isArray(rpc.data) ? rpc.data[0] : rpc.data;
+    if (row && row.status === "active") return true;
+  } else {
+    console.warn("Admin access RPC unavailable:", rpc.error.message);
+  }
+  const direct = await supabase.from("platform_admins").select("user_id,role,status").eq("user_id", user.id).eq("status", "active").maybeSingle();
+  if (direct.error) {
+    console.error("Direct admin access check failed:", direct.error);
     return false;
   }
-  return !!data;
+  return !!direct.data;
 }
 function login(message = "", type = "") {
   root.className = "";
@@ -107,12 +114,26 @@ function login(message = "", type = "") {
   });
 }
 function accessRequired() {
-  const sql = `insert into public.platform_admins (user_id, role, status)
+  const sql=`create or replace function public.get_my_platform_access()
+returns table (user_id uuid, role text, status text)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select pa.user_id, pa.role, pa.status
+  from public.platform_admins pa
+  where pa.user_id = auth.uid();
+$$;
+
+grant execute on function public.get_my_platform_access() to authenticated;
+
+insert into public.platform_admins (user_id, role, status)
 values ('${user.id}', 'owner', 'active')
 on conflict (user_id) do update
 set role = excluded.role, status = 'active', updated_at = now();`;
   root.className = "";
-  root.innerHTML = `<main class="login-shell"><section class="login-card"><div class="brand"><img src="assets/galaxy-cue-mark-transparent.png" alt="Galaxy Cue"><div><div class="eyebrow">Authentication successful</div><h1>Admin access not activated</h1></div></div><div class="notice success">The secure email link worked and you are signed in.</div><div class="access-panel"><h2>Activate this account once in Supabase</h2><p class="muted">Run the SQL below in <strong>Supabase \u2192 SQL Editor</strong>. It uses the exact signed-in user ID.</p><div class="access-meta"><div><span class="helper">Signed-in email</span><code>${esc(user.email || "Unknown")}</code></div><div><span class="helper">Auth user ID</span><code>${esc(user.id)}</code></div></div><div class="sql-box"><pre id="adminSql">${esc(sql)}</pre></div><div class="inline-actions"><button class="btn primary" id="copySql">Copy activation SQL</button><button class="btn" id="checkAgain">Check access again</button><button class="btn" id="logoutAccess">Sign out</button></div></div></section></main>`;
+  root.innerHTML = `<main class="login-shell"><section class="login-card"><div class="brand"><img src="assets/galaxy-cue-mark-transparent.png" alt="Galaxy Cue"><div><div class="eyebrow">Authentication successful</div><h1>Admin access not activated</h1></div></div><div class="notice success">The secure email link worked and you are signed in.</div><div class="access-panel"><h2>Finish Admin OS activation</h2><p class="muted">Run the SQL below once in <strong>Supabase \u2192 SQL Editor</strong>. It activates this exact account and installs the reliable Admin OS access check.</p><div class="access-meta"><div><span class="helper">Signed-in email</span><code>${esc(user.email || "Unknown")}</code></div><div><span class="helper">Auth user ID</span><code>${esc(user.id)}</code></div></div><div class="sql-box"><pre id="adminSql">${esc(sql)}</pre></div><div class="inline-actions"><button class="btn primary" id="copySql">Copy activation SQL</button><button class="btn" id="checkAgain">Check access again</button><button class="btn" id="logoutAccess">Sign out</button></div></div></section></main>`;
   document.querySelector("#copySql").onclick = async (e) => {
     await navigator.clipboard.writeText(sql);
     e.currentTarget.textContent = "SQL copied";
@@ -152,7 +173,7 @@ function shell(content) {
 async function render() {
   const data = await loadData();
   const counts = { businesses: await safeCount("businesses"), clients: await safeCount("clients"), events: await safeCount("events"), requests: await safeCount("booking_requests") };
-  const head = `<header class="topbar"><div><div class="eyebrow">Galaxy Cue Platform</div><h1>${view[0].toUpperCase() + view.slice(1)}</h1><p class="muted">Signed in as ${esc(user.email)}</p></div><span class="pill">v7.0.3</span></header>${data.errors.length ? '<div class="notice">Some platform data could not be read. Run the v7 platform migration and verify admin permissions.</div>' : ""}`;
+  const head = `<header class="topbar"><div><div class="eyebrow">Galaxy Cue Platform</div><h1>${view[0].toUpperCase() + view.slice(1)}</h1><p class="muted">Signed in as ${esc(user.email)}</p></div><span class="pill">v7.0.4</span></header>${data.errors.length ? '<div class="notice">Some platform data could not be read. Run the v7 platform migration and verify admin permissions.</div>' : ""}`;
   if (view === "dashboard") return shell(head + `<section class="cards"><div class="card metric"><small>Entertainment Companies</small><strong>${counts.businesses}</strong></div><div class="card metric"><small>Clients</small><strong>${counts.clients}</strong></div><div class="card metric"><small>Events</small><strong>${counts.events}</strong></div><div class="card metric"><small>Booking Requests</small><strong>${counts.requests}</strong></div></section><section class="section card"><h2>Platform boundaries</h2><p class="muted">Admin OS manages the Galaxy Cue platform. Business OS manages entertainment companies. Client App manages client-facing event collaboration.</p></section>`);
   if (view === "businesses") return shell(head + table("Businesses", ["Name", "Booking handle", "Created"], data.businesses.map((x) => [x.name, x.slug, new Date(x.created_at).toLocaleDateString()])));
   if (view === "users") return shell(head + `<section class="cards"><div class="card metric"><small>Business users</small><strong>Managed by memberships</strong></div><div class="card metric"><small>Client records</small><strong>${counts.clients}</strong></div></section>` + table("Recent clients", ["Client", "Email", "Business ID"], data.clients.map((x) => [x.name, x.email, x.business_id])));

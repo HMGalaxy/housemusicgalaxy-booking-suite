@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from '../../shared/js/config.js';
-import { weddingForm, corporateForm, privateForm } from '../../shared/js/modules.js?v=7030';
+import { weddingForm, corporateForm, privateForm } from '../../shared/js/modules.js?v=7040';
 
 const supabase=createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 const app=document.querySelector('#clientApp');
