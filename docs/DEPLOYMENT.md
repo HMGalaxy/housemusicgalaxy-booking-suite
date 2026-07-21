@@ -1,7 +1,7 @@
 # Deployment
 
-1. Extract `GALAXY_CUE_v7.0.0.zip`.
-2. Open the `GALAXY_CUE_v7.0.0` folder.
+1. Extract `GALAXY_CUE_v7.0.1.zip`.
+2. Open the `GALAXY_CUE_v7.0.1` folder.
 3. Upload everything inside it to the GitHub repository root.
 4. GitHub Settings → Pages → Deploy from branch → `main` → `/ (root)`.
 5. Wait for deployment and hard refresh.

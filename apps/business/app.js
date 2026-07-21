@@ -1,7 +1,7 @@
-import {bootstrapGalaxyCue} from '../../shared/js/core/bootstrap.js?v=7000';
-import {ensureWorkflow,getWorkflowState,allowedActions,transitionWorkflow,workflowProgress,ACTION_LABELS,WORKFLOW_STATES} from '../../shared/js/core/workflow.js?v=7000';
+import {bootstrapGalaxyCue} from '../../shared/js/core/bootstrap.js?v=7010';
+import {ensureWorkflow,getWorkflowState,allowedActions,transitionWorkflow,workflowProgress,ACTION_LABELS,WORKFLOW_STATES} from '../../shared/js/core/workflow.js?v=7010';
 const galaxyCueRuntime=bootstrapGalaxyCue();
-import {modules,weddingForm,corporateForm,privateForm,quoteForm,contractForm,weddingPlannerForm,corporatePlannerForm,privatePlannerForm,timelineForm,uploadsView,messagesView} from '../../shared/js/modules.js?v=7000';
+import {modules,weddingForm,corporateForm,privateForm,quoteForm,contractForm,weddingPlannerForm,corporatePlannerForm,privatePlannerForm,timelineForm,uploadsView,messagesView} from '../../shared/js/modules.js?v=7010';
 let supabase=null;
 let getCurrentUser=async()=>null;
 let restoreAuthSession=async()=>({user:null,error:null,handled:false});
@@ -288,7 +288,20 @@ function loadClientPortals(){try{return JSON.parse(localStorage.getItem(CLIENT_P
 function saveClientPortals(rows){localStorage.setItem(CLIENT_PORTAL_KEY,JSON.stringify(rows))}
 let clientPortals=loadClientPortals();
 let portalPreviewMode=false;
-let state=JSON.parse(localStorage.getItem(KEY)||OLD_KEYS.map(k=>localStorage.getItem(k)).find(Boolean)||'null')||{active:'wedding',bookingId:makeId(),forms:{},completed:[],updated:new Date().toISOString()};
+function loadInitialState(){
+  const fallback={active:'wedding',bookingId:makeId(),forms:{},completed:[],updated:new Date().toISOString()};
+  const raw=localStorage.getItem(KEY)||OLD_KEYS.map(k=>localStorage.getItem(k)).find(Boolean)||null;
+  if(!raw)return fallback;
+  try{
+    const parsed=JSON.parse(raw);
+    return parsed&&typeof parsed==='object'?parsed:fallback;
+  }catch(error){
+    console.warn('Stored Galaxy Cue state was invalid and has been reset.',error);
+    try{localStorage.removeItem(KEY)}catch(_error){}
+    return fallback;
+  }
+}
+let state=loadInitialState();
 ensureWorkflow(state);
 function makeId(){return `HMG-${new Date().getFullYear()}-${Math.random().toString(36).slice(2,7).toUpperCase()}`}
 let autoCloudSyncTimer=null;
