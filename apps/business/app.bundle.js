@@ -1,7 +1,7 @@
-import {bootstrapGalaxyCue} from '../../shared/js/core/bootstrap.js?v=10200';
-import {ensureWorkflow,getWorkflowState,allowedActions,transitionWorkflow,workflowProgress,ACTION_LABELS,WORKFLOW_STATES} from '../../shared/js/core/workflow.js?v=10200';
+import {bootstrapGalaxyCue} from '../../shared/js/core/bootstrap.js?v=10300';
+import {ensureWorkflow,getWorkflowState,allowedActions,transitionWorkflow,reconcileWorkflow,workflowProgress,ACTION_LABELS,WORKFLOW_STATES} from '../../shared/js/core/workflow.js?v=10300';
 const galaxyCueRuntime=bootstrapGalaxyCue();
-import {modules,weddingForm,corporateForm,privateForm,quoteForm,contractForm,weddingPlannerForm,corporatePlannerForm,privatePlannerForm,timelineForm,uploadsView,messagesView} from '../../shared/js/modules.js?v=10200';
+import {modules,weddingForm,corporateForm,privateForm,quoteForm,contractForm,weddingPlannerForm,corporatePlannerForm,privatePlannerForm,timelineForm,uploadsView,messagesView} from '../../shared/js/modules.js?v=10300';
 let supabase=null;
 let getCurrentUser=async()=>null;
 let restoreAuthSession=async()=>({user:null,error:null,handled:false});
@@ -114,7 +114,8 @@ function localEventFromState(eventState,linkedClient=null){
     breakdown_end_time:consultation.breakdownEndTime||null,
     venue_name:consultation.venueName||quote.venueName||null,
     venue_address:consultation.venueAddress||quote.venueAddress||null,
-    status:String(quote.quoteStatus||'draft').toLowerCase(),
+    status:String(getWorkflowState(eventState).id||quote.quoteStatus||'draft').toLowerCase(),
+    workflow_state:getWorkflowState(eventState).id,
     client_name:clientName,
     client_email:clientEmail,
     booking_data:JSON.parse(JSON.stringify(eventState)),
@@ -361,7 +362,7 @@ async function runAutoCloudSync({notify=false}={}){
 
 
 
-// ---- Unified event workflow bridge (v10.2.0) ----
+// ---- Unified event workflow bridge (v10.3.0) ----
 function eventCoreFromState(){
   state.eventCore=state.eventCore||{};
   const d=activeConsultation();
@@ -430,25 +431,32 @@ function syncFinancialRecordsFromEvent(){
 }
 function syncWorkflowFromRecords(){
   const {quote,contract,invoice}=syncFinancialRecordsFromEvent();
-  const wf=ensureWorkflow(state);
-  const advance=(action,actor)=>{if(allowedActions(state,actor).includes(action))transitionWorkflow(state,action,actor)};
-  const consultationId=['wedding','corporate','private'].find(id=>(state.completed||[]).includes(id));
-  if(consultationId&&wf.currentState==='BOOKING_REQUEST_RECEIVED')advance('send_event_form','organization');
-  if(consultationId&&wf.currentState==='EVENT_FORM_PENDING')advance('submit_event_form','client');
-  if(quote&&['Sent','Viewed','Accepted'].includes(quote.status)&&wf.currentState==='QUOTE_PREPARATION')advance('send_quote','organization');
-  if(quote?.status==='Accepted'&&wf.currentState==='QUOTE_REVIEW')advance('accept_quote','client');
-  if(contract&&['Sent','Viewed','Signed'].includes(contract.status)&&wf.currentState==='CONTRACT_PREPARATION')advance('send_contract_deposit','organization');
-  if(contract?.status==='Signed'&&wf.currentState==='CONTRACT_DEPOSIT_PENDING'&&!wf.contractSigned)advance('sign_contract','client');
-  const depositDue=quote?Math.round(quoteTotal(quote)*(Number(quote.depositPercent)||0)/100):0;
-  const verified=invoice?crmPayments.filter(p=>p.invoiceId===invoice.id&&p.status==='Verified').reduce((a,p)=>a+(Number(p.amountCents)||0),0):0;
-  if(wf.currentState==='CONTRACT_DEPOSIT_PENDING'&&depositDue>0&&verified>=depositDue&&!wf.depositPaid)advance('pay_deposit','client');
-  const planner=state.forms['wedding-planner']||state.forms['corporate-planner']||state.forms['private-planner']||{};
   const plannerId=plannerForBooking();
+  const consultationIds=['wedding','corporate','private'];
+  const consultationId=consultationIds.find(id=>state.forms?.[id]&&Object.keys(state.forms[id]).length);
+  const planningStarted=Boolean(plannerId&&state.forms?.[plannerId]&&Object.keys(state.forms[plannerId]).length);
   const planningCompleted=Boolean(plannerId&&(state.completed||[]).includes(plannerId));
-  if(wf.currentState==='PLANNING_FORM_PREPARATION'&&planningCompleted)advance('send_planning_form','organization');
-  if(wf.currentState==='PLANNING_FORM_PENDING'&&planningCompleted)advance('submit_planning_form','client');
-  if(wf.currentState==='PLANNING_REVIEW'&&planningCompleted)advance('approve_planning','organization');
-  if(wf.currentState==='FINAL_PAYMENT_PENDING'&&invoice&&invoiceBalance(invoice)<=0)advance('record_final_payment','organization');
+  const verifiedCents=invoice?invoicePaid(invoice):0;
+  const depositDueCents=quote?Math.round(quoteTotal(quote)*(Number(quote.depositPercent)||0)/100):0;
+  const eventStatus=String(state.eventStatus||'').toLowerCase();
+
+  reconcileWorkflow(state,{
+    eventFormStarted:Boolean(consultationId),
+    eventFormCompleted:Boolean(consultationId&&(state.completed||[]).includes(consultationId)),
+    quoteStatus:quote?.status||state.forms?.quote?.quoteStatus||'',
+    contractStatus:contract?.status||state.forms?.contract?.contractStatus||'',
+    contractSigned:Boolean(contract?.status==='Signed'||state.forms?.contract?.contractStatus==='Signed'),
+    depositPaid:Boolean((depositDueCents===0&&quote?.status==='Accepted')||(depositDueCents>0&&verifiedCents>=depositDueCents)),
+    planningStarted,
+    planningCompleted,
+    planningApproved:Boolean(state.planningApproved||getWorkflowState(state).id==='EVENT_READY'),
+    eventCompleted:Boolean(state.eventCompleted||['completed','complete'].includes(eventStatus)),
+    finalPaymentRequested:Boolean(state.finalPaymentRequested),
+    finalPaymentPaid:Boolean(invoice&&invoiceBalance(invoice)<=0&&Boolean(state.eventCompleted||['completed','complete'].includes(eventStatus))),
+    invoiceBalanceCents:invoice?invoiceBalance(invoice):NaN,
+    hasInvoice:Boolean(invoice),
+    archived:Boolean(state.archived)
+  });
 }
 function synchronizeEntireWorkflow(){propagateEventCore();syncWorkflowFromRecords();}
 
@@ -2424,9 +2432,10 @@ function renderMain(){
   main.className=`crm-main workspace-module workspace-module-${state.active}`;
   main.dataset.workspaceModule=state.active;
   const overview=workspaceOverview();
+  const workflowOverview=workflowStatusCard('organization');
   const context=['wedding','corporate','private'].includes(state.active)?'consultation':['wedding-planner','corporate-planner','private-planner'].includes(state.active)?'planning':null;
   const unifiedClient=context?workspaceClientCard():'';
-  main.innerHTML=`<section class="hero workspace-hero"><div><button class="text-button back-dashboard" data-view="${context==='planning'?'planning':context==='consultation'?'consultations':'dashboard'}">← Back</button><div class="eyebrow">Current Event · ${state.bookingId}</div><h1>${m.label}</h1><p>${m.description} ${currentUser?'Changes save and sync automatically while you are signed in.':'Changes save automatically in this browser.'}</p></div></section>${overview}${unifiedClient}<div class="booking-strip"><div class="ref"><small>Event Reference</small><br><strong>${state.bookingId}</strong></div><div class="actions"><span class="autosave-chip">● Saved locally</span><button class="btn" data-action="save">Save Now</button><button class="btn primary" data-action="cloud-sync">${currentUser?'Sync Now':'Sign in to Sync'}</button></div></div><div id="module"></div><div class="footer-note">Galaxy Cue · Entertainment Company Operating System</div>`;
+  main.innerHTML=`<section class="hero workspace-hero"><div><button class="text-button back-dashboard" data-view="${context==='planning'?'planning':context==='consultation'?'consultations':'dashboard'}">← Back</button><div class="eyebrow">Current Event · ${state.bookingId}</div><h1>${m.label}</h1><p>${m.description} ${currentUser?'Changes save and sync automatically while you are signed in.':'Changes save automatically in this browser.'}</p></div></section>${overview}${workflowOverview}${unifiedClient}<div class="booking-strip"><div class="ref"><small>Event Reference</small><br><strong>${state.bookingId}</strong></div><div class="actions"><span class="autosave-chip">● Saved locally</span><button class="btn" data-action="save">Save Now</button><button class="btn primary" data-action="cloud-sync">${currentUser?'Sync Now':'Sign in to Sync'}</button></div></div><div id="module"></div><div class="footer-note">Galaxy Cue · Entertainment Company Operating System</div>`;
   const host=document.querySelector('#module'),source=activeConsultation();
   host.className=`module-host module-${state.active}`;host.dataset.module=state.active;
   if(state.active==='wedding')host.innerHTML=weddingForm();

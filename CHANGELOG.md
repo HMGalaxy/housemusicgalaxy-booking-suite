@@ -1,4 +1,13 @@
-# Galaxy Cue v10.2.0
+# Galaxy Cue Changelog
+
+## v10.3.0 — Connected Workflow Runtime
+- Connected all existing event forms through one persisted workflow state.
+- Added record-driven workflow reconciliation for existing and new events.
+- Added the workflow status card to the active event workspace.
+- Event cards now store the central workflow state.
+- Updated visible version box and cache references to v10.3.0 / 10300.
+
+# Galaxy Cue v10.3.0
 
 ## Connected workflow release
 
