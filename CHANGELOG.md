@@ -1,6 +1,17 @@
+# Galaxy Cue Changelog
+
+## v9.1.0 — Business Templates
+- Preserved the v9 Business OS sidebar and layout as the platform standard.
+- Replaced Music Planner with Event Consultations and Event Planning.
+- Added template hubs for wedding, corporate, private and universal timeline workflows.
+- Added Settings controls for consultation forms, planning forms, services and equipment.
+- Added custom equipment entries, including optional Fog Machine support.
+- Replaced the Business header Client Login shortcut with a working Business Login action.
+- No database migration required; template preferences are stored locally.
+
 # Changelog
 
-## v9.0.0
+## v9.1.0
 
 ### Business OS milestones v8.1–v9.0
 
@@ -12,6 +23,6 @@
 - Added a consolidated Financials hub for Quotes, Invoices and Payments.
 - Added an Automation Center foundation with event-workflow templates.
 - Improved responsive behavior, event workspace tabs, spacing and visual consistency.
-- Updated visible and runtime version checks to v9.0.0 across all three applications.
+- Updated visible and runtime version checks to v9.1.0 across all three applications.
 
 No new database migration is required for this interface-focused release.

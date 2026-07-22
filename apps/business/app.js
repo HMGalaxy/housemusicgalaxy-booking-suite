@@ -1,7 +1,7 @@
-import {bootstrapGalaxyCue} from '../../shared/js/core/bootstrap.js?v=7040';
-import {ensureWorkflow,getWorkflowState,allowedActions,transitionWorkflow,workflowProgress,ACTION_LABELS,WORKFLOW_STATES} from '../../shared/js/core/workflow.js?v=7040';
+import {bootstrapGalaxyCue} from '../../shared/js/core/bootstrap.js?v=9100';
+import {ensureWorkflow,getWorkflowState,allowedActions,transitionWorkflow,workflowProgress,ACTION_LABELS,WORKFLOW_STATES} from '../../shared/js/core/workflow.js?v=9100';
 const galaxyCueRuntime=bootstrapGalaxyCue();
-import {modules,weddingForm,corporateForm,privateForm,quoteForm,contractForm,weddingPlannerForm,corporatePlannerForm,privatePlannerForm,timelineForm,uploadsView,messagesView} from '../../shared/js/modules.js?v=7040';
+import {modules,weddingForm,corporateForm,privateForm,quoteForm,contractForm,weddingPlannerForm,corporatePlannerForm,privatePlannerForm,timelineForm,uploadsView,messagesView} from '../../shared/js/modules.js?v=9100';
 let supabase=null;
 let getCurrentUser=async()=>null;
 let restoreAuthSession=async()=>({user:null,error:null,handled:false});
@@ -71,7 +71,7 @@ async function loadCloudModule(){
     return false;
   }
 }
-const KEY='hmg_booking_suite_v09';
+const KEY='hmg_booking_suite_v091';
 const OLD_KEYS=['hmg_booking_suite_v08','hmg_booking_suite_v07','hmg_booking_suite_v06','hmg_booking_suite_v05','hmg_booking_suite_v04'];
 let currentUser=null;
 let cloudBusy=false;
@@ -595,7 +595,7 @@ function shell(){document.querySelector('#app').innerHTML=`<div class="crm-shell
   <div class="topbar-tools">
     <button class="command-trigger" data-action="command">⌘K <span>Quick actions</span></button>
     <div class="cloud-status ${currentUser?'online':'offline'}"><span></span>${currentUser?escapeHtml(currentUser.email||'Signed in'):'Local mode'}</div>
-    <button class="btn compact" data-action="client-login">Client Login</button>
+    <button class="btn compact" data-action="business-login">Business Login</button>
     <button class="btn compact account-button" data-action="${currentUser?'logout':'login'}">${currentUser?'Sign Out':'Business Login'}</button>
     <button class="status-pill version-indicator" type="button" data-action="force-refresh" title="Build ${escapeHtml(galaxyCueRuntime.build)} · Click to clear cache and reload">✓&nbsp; v${escapeHtml(galaxyCueRuntime.version)}</button>
   </div>
@@ -619,7 +619,8 @@ function shell(){document.querySelector('#app').innerHTML=`<div class="crm-shell
     ${[
       ['messages','○','Messages'],
       ['documents','▱','Documents'],
-      ['music','♫','Music Planner'],
+      ['consultations','◇','Event Consultations'],
+      ['planning','▤','Event Planning'],
       ['financials','$','Financials'],
       ['automation','⌁','Automation']
     ].map(([id,icon,label])=>`<button class="crm-nav ${effectiveNavigationView()===id?'active':''}" data-view="${id}" ${effectiveNavigationView()===id?'aria-current="page"':''}><span>${icon}</span>${label}</button>`).join('')}
@@ -661,14 +662,72 @@ function renderAppView(){
   else if(appView==='documents')renderDocumentsHub();
   else if(appView==='financials')renderFinancialHub();
   else if(appView==='automation')renderAutomationCenter();
+  else if(appView==='consultations')renderConsultationHub();
+  else if(appView==='planning')renderPlanningHub();
   else if(appView==='client-portal')renderClientPortal();
   else if(appView==='analytics')renderSectionView('Analytics','Understand bookings, revenue and business performance.','⌁');
   else if(appView==='settings')renderSettings();
-  else if(appView==='music'||appView==='files'||appView==='messages'){
+  else if(appView==='files'||appView==='messages'){
     console.warn('Legacy route reached; normalizing navigation route.');
     navigateToView(appView);
   }
   else renderMain();
+}
+
+
+const TEMPLATE_SETTINGS_KEY='galaxy_cue_business_template_settings_v1';
+const DEFAULT_TEMPLATE_SETTINGS={
+  consultationTypes:{wedding:true,corporate:true,private:true},
+  planningTypes:{wedding:true,corporate:true,private:true,timeline:true},
+  equipment:{
+    'DJ Performance Only':true,'Essential Sound System':true,'Premium Sound System':true,
+    'Additional Speakers':true,'Subwoofers':true,'Multiple Audio Zones':true,
+    'Wireless Microphone':true,'Not Sure — Please Recommend':true,
+    'No Lighting Required':true,'Dance Floor Lighting':true,'Intelligent Moving Lights':true,
+    'Ambient Uplighting':true,'Monogram / Gobo Projection':true,'Haze / Atmosphere Effects':false,
+    'Dancing on the Clouds':false,'Fog Machine':false
+  }
+};
+function loadTemplateSettings(){
+  try{
+    const saved=JSON.parse(localStorage.getItem(TEMPLATE_SETTINGS_KEY)||'{}');
+    return {
+      consultationTypes:{...DEFAULT_TEMPLATE_SETTINGS.consultationTypes,...(saved.consultationTypes||{})},
+      planningTypes:{...DEFAULT_TEMPLATE_SETTINGS.planningTypes,...(saved.planningTypes||{})},
+      equipment:{...DEFAULT_TEMPLATE_SETTINGS.equipment,...(saved.equipment||{})}
+    };
+  }catch{return JSON.parse(JSON.stringify(DEFAULT_TEMPLATE_SETTINGS));}
+}
+function saveTemplateSettings(settings){localStorage.setItem(TEMPLATE_SETTINGS_KEY,JSON.stringify(settings));}
+function renderTemplateCard(item){return `<button class="v9-template-card" data-module="${item.id}"><span class="v9-template-icon">${item.icon}</span><div><small>${item.type}</small><h2>${item.title}</h2><p>${item.description}</p></div><em>Open form →</em></button>`;}
+function renderConsultationHub(){
+  const settings=loadTemplateSettings();
+  const items=[
+    {id:'wedding',key:'wedding',icon:'♥',type:'Consultation template',title:'Wedding Consultation',description:'Couple, venue, schedule, production, music direction and special moments.'},
+    {id:'corporate',key:'corporate',icon:'▣',type:'Consultation template',title:'Corporate Consultation',description:'Company, program, speakers, branding, AV, entertainment and production requirements.'},
+    {id:'private',key:'private',icon:'✦',type:'Consultation template',title:'Private Event Consultation',description:'Birthdays, celebrations, school events and custom private-party requirements.'}
+  ].filter(item=>settings.consultationTypes[item.key]!==false);
+  const main=document.querySelector('#main');
+  main.innerHTML=`<section class="dash-hero compact-hero"><div><div class="eyebrow">Business OS · Work</div><h1>Event Consultations</h1><p>Start with the right consultation form for each event type. Your enabled services and equipment appear automatically.</p></div><button class="btn" data-view="settings">Configure Templates</button></section>
+  <section class="v9-template-grid">${items.map(renderTemplateCard).join('')||'<div class="empty-state">No consultation templates are enabled. Open Settings to activate one.</div>'}</section>
+  <section class="v9-template-note"><strong>Template-driven forms</strong><p>Changes made under Settings → Form Templates apply to every new consultation. Add equipment when your inventory grows, or hide services you do not offer.</p></section>`;
+  main.querySelectorAll('[data-module]').forEach(button=>button.addEventListener('click',()=>{state.active=button.dataset.module;appView='workspace';shell();}));
+  main.querySelector('[data-view="settings"]')?.addEventListener('click',()=>navigateToView('settings'));
+}
+function renderPlanningHub(){
+  const settings=loadTemplateSettings();
+  const items=[
+    {id:'wedding-planner',key:'wedding',icon:'♥',type:'Planning form',title:'Wedding Event Planning',description:'Ceremony, introductions, formalities, special dances, music requests, announcements and reception flow.'},
+    {id:'corporate-planner',key:'corporate',icon:'▣',type:'Planning form',title:'Corporate Event Planning',description:'Run of show, speakers, walk-on music, awards, breaks, presentations, microphones and brand cues.'},
+    {id:'private-planner',key:'private',icon:'✦',type:'Planning form',title:'Private Event Planning',description:'Celebration flow, honoree moments, announcements, music profile, requests and closing.'},
+    {id:'timeline',key:'timeline',icon:'↕',type:'Universal planning tool',title:'Event Timeline Builder',description:'Build a detailed chronological production timeline for any event type.'}
+  ].filter(item=>settings.planningTypes[item.key]!==false);
+  const main=document.querySelector('#main');
+  main.innerHTML=`<section class="dash-hero compact-hero"><div><div class="eyebrow">Business OS · Work</div><h1>Event Planning</h1><p>Turn consultation details into a complete operational plan for the event team.</p></div><button class="btn" data-view="settings">Configure Templates</button></section>
+  <section class="v9-template-grid">${items.map(renderTemplateCard).join('')||'<div class="empty-state">No planning templates are enabled. Open Settings to activate one.</div>'}</section>
+  <section class="v9-template-note"><strong>One connected event workflow</strong><p>Consultation information stays with the event and pre-fills the matching planning workspace, reducing duplicate entry.</p></section>`;
+  main.querySelectorAll('[data-module]').forEach(button=>button.addEventListener('click',()=>{state.active=button.dataset.module;appView='workspace';shell();}));
+  main.querySelector('[data-view="settings"]')?.addEventListener('click',()=>navigateToView('settings'));
 }
 
 function renderDocumentsHub(){
@@ -1590,6 +1649,18 @@ function renderSettings(){
       <div class="business-preview"><span>${escapeHtml((businessSettings.businessName||'G').charAt(0).toUpperCase())}</span><div><strong>${escapeHtml(businessSettings.businessName||'Your Entertainment Company')}</strong><small>Powered by Galaxy Cue</small></div></div>
       <button class="btn full" type="button" data-preview-portal>Preview Client Portal</button>
     </section>
+    <section class="settings-card settings-template-manager"><div class="section-title"><div><small>Form templates</small><h2>Consultation & Planning Templates</h2></div></div>
+      <p class="settings-note">Choose which event forms and equipment options appear in the Business OS. These settings are stored for this browser workspace and affect newly opened forms immediately.</p>
+      <div class="template-settings-block"><h3>Consultation forms</h3><div class="template-toggle-grid">
+        ${Object.entries({wedding:'Wedding Consultation',corporate:'Corporate Consultation',private:'Private Event Consultation'}).map(([key,label])=>`<label class="template-toggle"><input type="checkbox" name="consultationType" value="${key}" ${loadTemplateSettings().consultationTypes[key]!==false?'checked':''}><span>${label}</span></label>`).join('')}
+      </div></div>
+      <div class="template-settings-block"><h3>Event planning forms</h3><div class="template-toggle-grid">
+        ${Object.entries({wedding:'Wedding Event Planning',corporate:'Corporate Event Planning',private:'Private Event Planning',timeline:'Universal Timeline Builder'}).map(([key,label])=>`<label class="template-toggle"><input type="checkbox" name="planningType" value="${key}" ${loadTemplateSettings().planningTypes[key]!==false?'checked':''}><span>${label}</span></label>`).join('')}
+      </div></div>
+      <div class="template-settings-block"><div class="template-settings-heading"><h3>Services & equipment checkboxes</h3><button class="btn compact" type="button" data-add-equipment>＋ Add custom item</button></div><div class="template-toggle-grid equipment-grid">
+        ${Object.entries(loadTemplateSettings().equipment).map(([label,enabled])=>`<label class="template-toggle"><input type="checkbox" name="equipmentOption" value="${escapeHtml(label)}" ${enabled?'checked':''}><span>${escapeHtml(label)}</span></label>`).join('')}
+      </div><p class="settings-note">Example: enable “Fog Machine” only after the business owns and offers one.</p></div>
+    </section>
     <section class="settings-card build-card"><div class="section-title"><div><small>About this deployment</small><h2>Build Information</h2></div></div>
       <div class="build-grid"><div><span>Version</span><strong>${escapeHtml(galaxyCueRuntime.version)}</strong></div><div><span>Build</span><strong>${escapeHtml(galaxyCueRuntime.build)}</strong></div><div><span>Release</span><strong>${escapeHtml(galaxyCueRuntime.release)}</strong></div><div><span>Mode</span><strong>${currentUser?'Cloud':'Local'}</strong></div></div>
       <button class="btn full" type="button" data-action="force-refresh">Clear Cache & Reload Latest Build</button>
@@ -1598,7 +1669,20 @@ function renderSettings(){
     <button class="btn primary settings-save" type="submit">Save Business Settings</button>
   </form>`;
   const form=document.querySelector('#businessSettingsForm');
-  if(form)form.addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(form);businessSettings={businessName:String(fd.get('businessName')||''),contactEmail:String(fd.get('contactEmail')||''),contactPhone:String(fd.get('contactPhone')||''),website:String(fd.get('website')||''),venmoHandle:String(fd.get('venmoHandle')||''),cardPaymentUrl:String(fd.get('cardPaymentUrl')||''),paymentInstructions:String(fd.get('paymentInstructions')||'')};saveBusinessSettings(businessSettings);if(currentUser&&activeBusinessId()){const {error}=await saveCloudBusinessSettings(businessSettings,activeBusinessId());if(error)return toast(`Saved locally — cloud sync failed: ${error.message}`)}renderSettings();toast(currentUser?'Business settings saved and synced':'Business settings saved locally')});
+  if(form)form.addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(form);businessSettings={businessName:String(fd.get('businessName')||''),contactEmail:String(fd.get('contactEmail')||''),contactPhone:String(fd.get('contactPhone')||''),website:String(fd.get('website')||''),venmoHandle:String(fd.get('venmoHandle')||''),cardPaymentUrl:String(fd.get('cardPaymentUrl')||''),paymentInstructions:String(fd.get('paymentInstructions')||'')};saveBusinessSettings(businessSettings);
+    const templateSettings=loadTemplateSettings();
+    templateSettings.consultationTypes={wedding:false,corporate:false,private:false};
+    form.querySelectorAll('input[name="consultationType"]:checked').forEach(input=>templateSettings.consultationTypes[input.value]=true);
+    templateSettings.planningTypes={wedding:false,corporate:false,private:false,timeline:false};
+    form.querySelectorAll('input[name="planningType"]:checked').forEach(input=>templateSettings.planningTypes[input.value]=true);
+    Object.keys(templateSettings.equipment).forEach(key=>templateSettings.equipment[key]=false);
+    form.querySelectorAll('input[name="equipmentOption"]').forEach(input=>templateSettings.equipment[input.value]=input.checked);
+    saveTemplateSettings(templateSettings);
+    if(currentUser&&activeBusinessId()){const {error}=await saveCloudBusinessSettings(businessSettings,activeBusinessId());if(error)return toast(`Saved locally — cloud sync failed: ${error.message}`)}renderSettings();toast(currentUser?'Business settings saved and synced':'Business settings saved locally')});
+  document.querySelector('[data-add-equipment]')?.addEventListener('click',()=>{
+    const label=prompt('Equipment or service name:')?.trim();if(!label)return;
+    const settings=loadTemplateSettings();settings.equipment[label]=true;saveTemplateSettings(settings);renderSettings();toast(`${label} added to form templates`);
+  });
   const preview=document.querySelector('[data-preview-portal]');if(preview)preview.addEventListener('click',()=>{appView='client-portal';portalPreviewMode=true;shell()});
 }
 
@@ -2202,7 +2286,7 @@ async function bindGlobalActions(){
   }));
   document.querySelectorAll('[data-action="logout"]').forEach(b=>b.addEventListener('click',async()=>{await signOut();currentUser=null;cloudBookings=loadLocalEvents();eventCloudStatus='Local';shell();toast('Signed out')}));
   document.querySelectorAll('[data-action="command"]').forEach(b=>b.addEventListener('click',openCommand));
-  document.querySelectorAll('[data-action="client-login"]').forEach(button=>button.addEventListener('click',()=>{
+  document.querySelectorAll('[data-action="business-login"]').forEach(button=>button.addEventListener('click',()=>{
     const url=new URL('client-portal.html',window.location.href);
     if(activeBusinessId())url.searchParams.set('business',activeBusinessId());
     window.open(url.toString(),'_blank','noopener');
@@ -2281,7 +2365,7 @@ function installResponsiveNavigationGuards(){
 
 function runConnectionAudit(){
   const issues=[];
-  const knownViews=new Set(['dashboard','bookings','quotes','contracts','invoices','payments','clients','calendar','music','files','messages','client-portal','analytics','settings','workspace']);
+  const knownViews=new Set(['dashboard','bookings','quotes','contracts','invoices','payments','clients','calendar','consultations','planning','files','messages','client-portal','analytics','settings','workspace']);
   const knownModules=new Set(modules.map(module=>module.id));
 
   document.querySelectorAll('[data-view]').forEach(element=>{
@@ -2330,7 +2414,8 @@ function drawCommands(q=''){
     {label:'Open Events',hint:'Search the CRM',run:()=>navigateToView('bookings')},
     {label:'Create New Event',hint:'Start a fresh workflow',run:newBooking},
     {label:'Open Current Event',hint:state.bookingId,run:()=>navigateToView('workspace')},
-    {label:'Preview Client Portal',hint:state.bookingId,run:()=>{portalPreviewMode=true;navigateToView('client-portal')}},
+    {label:'Event Consultations',hint:'Open consultation templates',run:()=>navigateToView('consultations')},
+    {label:'Event Planning',hint:'Open planning templates',run:()=>navigateToView('planning')},
     {label:'Business Settings',hint:'Company name and payment methods',run:()=>navigateToView('settings')},
     {label:'Run System Check',hint:'Audit navigation and interface connections',run:runConnectionAudit},
   ];
