@@ -1,7 +1,7 @@
-import {bootstrapGalaxyCue} from '../../shared/js/core/bootstrap.js?v=9400';
-import {ensureWorkflow,getWorkflowState,allowedActions,transitionWorkflow,workflowProgress,ACTION_LABELS,WORKFLOW_STATES} from '../../shared/js/core/workflow.js?v=9400';
+import {bootstrapGalaxyCue} from '../../shared/js/core/bootstrap.js?v=10000';
+import {ensureWorkflow,getWorkflowState,allowedActions,transitionWorkflow,workflowProgress,ACTION_LABELS,WORKFLOW_STATES} from '../../shared/js/core/workflow.js?v=10000';
 const galaxyCueRuntime=bootstrapGalaxyCue();
-import {modules,weddingForm,corporateForm,privateForm,quoteForm,contractForm,weddingPlannerForm,corporatePlannerForm,privatePlannerForm,timelineForm,uploadsView,messagesView} from '../../shared/js/modules.js?v=9400';
+import {modules,weddingForm,corporateForm,privateForm,quoteForm,contractForm,weddingPlannerForm,corporatePlannerForm,privatePlannerForm,timelineForm,uploadsView,messagesView} from '../../shared/js/modules.js?v=10000';
 let supabase=null;
 let getCurrentUser=async()=>null;
 let restoreAuthSession=async()=>({user:null,error:null,handled:false});
@@ -595,7 +595,7 @@ function shell(){document.querySelector('#app').innerHTML=`<div class="crm-shell
   <div class="topbar-tools">
     <button class="command-trigger" data-action="command">⌘K <span>Quick actions</span></button>
     <div class="cloud-status ${currentUser?'online':'offline'}"><span></span>${currentUser?escapeHtml(currentUser.email||'Signed in'):'Local mode'}</div>
-    <button class="btn compact account-button" data-action="${currentUser?'logout':'business-login'}">${currentUser?'Sign Out':'Business Login'}</button>
+    <button class="btn compact account-button" data-action="${currentUser?'logout':'login'}">${currentUser?'Sign Out':'Business Login'}</button>
     <button class="status-pill version-indicator" type="button" data-action="force-refresh" title="Build ${escapeHtml(galaxyCueRuntime.build)} · Click to clear cache and reload">✓&nbsp; v${escapeHtml(galaxyCueRuntime.version)}</button>
   </div>
 </header>
@@ -676,66 +676,79 @@ function renderAppView(){
 
 const TEMPLATE_SETTINGS_KEY='galaxy_cue_business_template_settings_v2';
 const LEGACY_TEMPLATE_SETTINGS_KEY='galaxy_cue_business_template_settings_v1';
-const TEMPLATE_CATEGORIES=['services','audio','lighting','effects','entertainment'];
 const BUILT_IN_TEMPLATE_ITEMS=[
-  {id:'dj-digital',name:'DJ — Digital Format',category:'services',enabled:true,consultation:true,planning:true,protected:true,equipmentRelevant:false},
-  {id:'dj-vinyl',name:'DJ — Vinyl Set',category:'services',enabled:true,consultation:true,planning:true,protected:true,equipmentRelevant:false},
-  {id:'live-band',name:'Live Band',category:'services',enabled:true,consultation:true,planning:true,protected:true,equipmentRelevant:false},
-  {id:'acoustic-performance',name:'Acoustic Performance',category:'services',enabled:true,consultation:true,planning:true,protected:true,equipmentRelevant:false},
-  {id:'solo-musician',name:'Solo Musician',category:'services',enabled:true,consultation:true,planning:true,protected:true,equipmentRelevant:false},
-  {id:'master-of-ceremonies',name:'Master of Ceremonies (MC)',category:'services',enabled:true,consultation:true,planning:true,protected:true,equipmentRelevant:false},
-  {id:'karaoke-host',name:'Karaoke Host',category:'services',enabled:true,consultation:true,planning:true,protected:true,equipmentRelevant:false},
-  {id:'ceremony-music',name:'Ceremony Music',category:'services',enabled:true,consultation:true,planning:true,protected:true,equipmentRelevant:false},
-  {id:'hybrid-dj-live',name:'Hybrid DJ + Live Music',category:'services',enabled:true,consultation:true,planning:true,protected:true,equipmentRelevant:false},
-  {id:'performance-only',name:'Performance Only — No Equipment',category:'services',enabled:true,consultation:true,planning:true,protected:true,equipmentRelevant:false},
-  {id:'performance-equipment',name:'Performance with Equipment',category:'services',enabled:true,consultation:true,planning:true,protected:true,equipmentRelevant:true},
-  {id:'essential-sound',name:'Essential Sound System',category:'audio',enabled:true,consultation:true,planning:true,protected:true,equipmentRelevant:true},
-  {id:'premium-sound',name:'Premium Sound System',category:'audio',enabled:true,consultation:true,planning:true,protected:true,equipmentRelevant:true},
-  {id:'multiple-audio-zones',name:'Multiple Audio Zones',category:'audio',enabled:true,consultation:true,planning:true,protected:true,equipmentRelevant:true},
-  {id:'wireless-microphone',name:'Wireless Microphone',category:'audio',enabled:true,consultation:true,planning:true,protected:true,equipmentRelevant:true},
-  {id:'ceremony-sound',name:'Ceremony Sound System',category:'audio',enabled:true,consultation:true,planning:true,protected:true,equipmentRelevant:true},
-  {id:'cocktail-audio',name:'Cocktail Audio System',category:'audio',enabled:true,consultation:true,planning:true,protected:true,equipmentRelevant:true},
-  {id:'no-lighting',name:'No Lighting Required',category:'lighting',enabled:true,consultation:true,planning:true,protected:true,equipmentRelevant:true},
-  {id:'essential-lighting',name:'Essential Lighting',category:'lighting',enabled:true,consultation:true,planning:true,protected:true,equipmentRelevant:true},
-  {id:'premium-lighting',name:'Premium Lighting',category:'lighting',enabled:true,consultation:true,planning:true,protected:true,equipmentRelevant:true},
-  {id:'ambient-lighting',name:'Ambient Lighting',category:'lighting',enabled:true,consultation:true,planning:true,protected:true,equipmentRelevant:true},
-  {id:'dance-floor-lighting',name:'Dance Floor Lighting',category:'lighting',enabled:true,consultation:true,planning:true,protected:true,equipmentRelevant:true},
-  {id:'uplighting',name:'Uplighting',category:'lighting',enabled:true,consultation:true,planning:true,protected:true,equipmentRelevant:true},
-  {id:'moving-lights',name:'Intelligent Moving Lights',category:'lighting',enabled:true,consultation:true,planning:true,protected:true,equipmentRelevant:true},
-  {id:'haze',name:'Haze',category:'effects',enabled:true,consultation:true,planning:true,protected:true,equipmentRelevant:true},
-  {id:'photo-booth',name:'Photo Booth',category:'entertainment',enabled:true,consultation:true,planning:true,protected:true,equipmentRelevant:false},
-  {id:'360-booth',name:'360 Booth',category:'entertainment',enabled:true,consultation:true,planning:true,protected:true,equipmentRelevant:false},
-  {id:'audio-guestbook',name:'Audio Guestbook',category:'entertainment',enabled:true,consultation:true,planning:true,protected:true,equipmentRelevant:false},
-  {id:'karaoke',name:'Karaoke',category:'entertainment',enabled:true,consultation:true,planning:true,protected:true,equipmentRelevant:false},
-  {id:'games',name:'Games',category:'entertainment',enabled:true,consultation:true,planning:true,protected:true,equipmentRelevant:false},
-  {id:'trivia',name:'Trivia',category:'entertainment',enabled:true,consultation:true,planning:true,protected:true,equipmentRelevant:false},
-  {id:'live-streaming',name:'Live Streaming',category:'entertainment',enabled:true,consultation:true,planning:true,protected:true,equipmentRelevant:false}
+  {id:'dj-digital',name:'DJ — Digital Format',category:'services',enabled:true,consultation:true,planning:true,protected:true,equipmentRequired:false},
+  {id:'dj-vinyl',name:'DJ — Vinyl Set',category:'services',enabled:true,consultation:true,planning:true,protected:true,equipmentRequired:false},
+  {id:'live-band',name:'Live Band',category:'services',enabled:true,consultation:true,planning:true,protected:true,equipmentRequired:false},
+  {id:'acoustic-performance',name:'Acoustic Performance',category:'services',enabled:true,consultation:true,planning:true,protected:true,equipmentRequired:false},
+  {id:'solo-musician',name:'Solo Musician',category:'services',enabled:true,consultation:true,planning:true,protected:true,equipmentRequired:false},
+  {id:'mc',name:'Master of Ceremonies (MC)',category:'services',enabled:true,consultation:true,planning:true,protected:true,equipmentRequired:false},
+  {id:'karaoke-host',name:'Karaoke Host',category:'services',enabled:false,consultation:true,planning:true,protected:true,equipmentRequired:false},
+  {id:'ceremony-music',name:'Ceremony Music',category:'services',enabled:true,consultation:true,planning:true,protected:true,equipmentRequired:false},
+  {id:'hybrid-dj-live',name:'Hybrid DJ + Live Music',category:'services',enabled:false,consultation:true,planning:true,protected:true,equipmentRequired:false},
+  {id:'performance-only',name:'Performance Only — No Equipment',category:'services',enabled:true,consultation:true,planning:true,protected:true,equipmentRequired:false},
+  {id:'performance-equipment',name:'Performance with Equipment',category:'services',enabled:true,consultation:true,planning:true,protected:true,equipmentRequired:true},
+  {id:'essential-sound',name:'Essential Sound System',category:'audio',enabled:true,consultation:true,planning:true,protected:true,equipmentRequired:true},
+  {id:'premium-sound',name:'Premium Sound System',category:'audio',enabled:true,consultation:true,planning:true,protected:true,equipmentRequired:true},
+  {id:'audio-zones',name:'Multiple Audio Zones',category:'audio',enabled:true,consultation:true,planning:true,protected:true,equipmentRequired:true},
+  {id:'wireless-mic',name:'Wireless Microphone',category:'audio',enabled:true,consultation:true,planning:true,protected:true,equipmentRequired:true},
+  {id:'ceremony-sound',name:'Ceremony Sound System',category:'audio',enabled:true,consultation:true,planning:true,protected:true,equipmentRequired:true},
+  {id:'cocktail-audio',name:'Cocktail Audio System',category:'audio',enabled:true,consultation:true,planning:true,protected:true,equipmentRequired:true},
+  {id:'no-lighting',name:'No Lighting Required',category:'lighting',enabled:true,consultation:true,planning:true,protected:true,equipmentRequired:false},
+  {id:'essential-lighting',name:'Essential Lighting',category:'lighting',enabled:true,consultation:true,planning:true,protected:true,equipmentRequired:true},
+  {id:'premium-lighting',name:'Premium Lighting',category:'lighting',enabled:true,consultation:true,planning:true,protected:true,equipmentRequired:true},
+  {id:'ambient-lighting',name:'Ambient Lighting',category:'lighting',enabled:true,consultation:true,planning:true,protected:true,equipmentRequired:true},
+  {id:'dance-lighting',name:'Dance Floor Lighting',category:'lighting',enabled:true,consultation:true,planning:true,protected:true,equipmentRequired:true},
+  {id:'uplighting',name:'Uplighting',category:'lighting',enabled:true,consultation:true,planning:true,protected:true,equipmentRequired:true},
+  {id:'moving-lights',name:'Intelligent Moving Lights',category:'lighting',enabled:true,consultation:true,planning:true,protected:true,equipmentRequired:true},
+  {id:'haze',name:'Haze',category:'effects',enabled:true,consultation:true,planning:true,protected:true,equipmentRequired:true},
+  {id:'photo-booth',name:'Photo Booth',category:'entertainment',enabled:false,consultation:true,planning:true,protected:true,equipmentRequired:true},
+  {id:'360-booth',name:'360 Booth',category:'entertainment',enabled:false,consultation:true,planning:true,protected:true,equipmentRequired:true},
+  {id:'audio-guestbook',name:'Audio Guestbook',category:'entertainment',enabled:false,consultation:true,planning:true,protected:true,equipmentRequired:true},
+  {id:'karaoke',name:'Karaoke',category:'entertainment',enabled:false,consultation:true,planning:true,protected:true,equipmentRequired:true},
+  {id:'games',name:'Games',category:'entertainment',enabled:false,consultation:true,planning:true,protected:true,equipmentRequired:false},
+  {id:'trivia',name:'Trivia',category:'entertainment',enabled:false,consultation:true,planning:true,protected:true,equipmentRequired:false},
+  {id:'live-streaming',name:'Live Streaming',category:'entertainment',enabled:false,consultation:true,planning:true,protected:true,equipmentRequired:true}
 ];
-const DEFAULT_TEMPLATE_SETTINGS={consultationTypes:{wedding:true,corporate:true,private:true},planningTypes:{wedding:true,corporate:true,private:true,timeline:true},items:BUILT_IN_TEMPLATE_ITEMS};
-function cloneTemplateItems(items){return items.map(item=>({...item}));}
-function migrateLegacyTemplateSettings(){
-  try{
-    const legacy=JSON.parse(localStorage.getItem(LEGACY_TEMPLATE_SETTINGS_KEY)||'null');
-    if(!legacy)return null;
-    const built=cloneTemplateItems(BUILT_IN_TEMPLATE_ITEMS);
-    const known=new Set(built.map(item=>item.name.toLowerCase()));
-    const custom=Object.entries(legacy.equipment||{}).filter(([name])=>!known.has(String(name).toLowerCase())&&!['DJ Performance Only','Additional Speakers','Subwoofers','Not Sure — Please Recommend','Ambient Uplighting','Monogram / Gobo Projection','Haze / Atmosphere Effects','Dancing on the Clouds','Fog Machine'].includes(name)).map(([name,enabled])=>({id:`custom-${crypto.randomUUID()}`,name,category:'entertainment',enabled:Boolean(enabled),consultation:true,planning:true,protected:false,equipmentRelevant:false,notes:''}));
-    return {consultationTypes:{...DEFAULT_TEMPLATE_SETTINGS.consultationTypes,...(legacy.consultationTypes||{})},planningTypes:{...DEFAULT_TEMPLATE_SETTINGS.planningTypes,...(legacy.planningTypes||{})},items:[...built,...custom]};
-  }catch{return null;}
-}
+const DEFAULT_TEMPLATE_SETTINGS={
+  consultationTypes:{wedding:true,corporate:true,private:true},
+  planningTypes:{wedding:true,corporate:true,private:true,timeline:true},
+  items:BUILT_IN_TEMPLATE_ITEMS.map(item=>({...item}))
+};
+function slugifyTemplateItem(value=''){return String(value).toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||`custom-${Date.now()}`;}
 function loadTemplateSettings(){
   try{
-    const saved=JSON.parse(localStorage.getItem(TEMPLATE_SETTINGS_KEY)||'null')||migrateLegacyTemplateSettings()||{};
-    const savedItems=Array.isArray(saved.items)?saved.items:[];
-    const savedById=new Map(savedItems.map(item=>[item.id,item]));
-    const built=BUILT_IN_TEMPLATE_ITEMS.map(item=>({...item,...(savedById.get(item.id)||{}),protected:true}));
-    const custom=savedItems.filter(item=>!item.protected&&!BUILT_IN_TEMPLATE_ITEMS.some(core=>core.id===item.id)).map(item=>({...item,protected:false}));
-    return {consultationTypes:{...DEFAULT_TEMPLATE_SETTINGS.consultationTypes,...(saved.consultationTypes||{})},planningTypes:{...DEFAULT_TEMPLATE_SETTINGS.planningTypes,...(saved.planningTypes||{})},items:[...built,...custom]};
-  }catch{return {consultationTypes:{...DEFAULT_TEMPLATE_SETTINGS.consultationTypes},planningTypes:{...DEFAULT_TEMPLATE_SETTINGS.planningTypes},items:cloneTemplateItems(BUILT_IN_TEMPLATE_ITEMS)};}
+    const saved=JSON.parse(localStorage.getItem(TEMPLATE_SETTINGS_KEY)||'null');
+    if(saved&&Array.isArray(saved.items)){
+      const savedById=new Map(saved.items.map(item=>[item.id,item]));
+      const builtIns=BUILT_IN_TEMPLATE_ITEMS.map(item=>({...item,...(savedById.get(item.id)||{}),protected:true}));
+      const custom=saved.items.filter(item=>!item.protected&&!BUILT_IN_TEMPLATE_ITEMS.some(core=>core.id===item.id));
+      return {consultationTypes:{...DEFAULT_TEMPLATE_SETTINGS.consultationTypes,...(saved.consultationTypes||{})},planningTypes:{...DEFAULT_TEMPLATE_SETTINGS.planningTypes,...(saved.planningTypes||{})},items:[...builtIns,...custom]};
+    }
+    const legacy=JSON.parse(localStorage.getItem(LEGACY_TEMPLATE_SETTINGS_KEY)||'null');
+    if(legacy){
+      const migrated=JSON.parse(JSON.stringify(DEFAULT_TEMPLATE_SETTINGS));
+      migrated.consultationTypes={...migrated.consultationTypes,...(legacy.consultationTypes||{})};
+      migrated.planningTypes={...migrated.planningTypes,...(legacy.planningTypes||{})};
+      if(legacy.equipment){
+        Object.entries(legacy.equipment).forEach(([name,enabled])=>{
+          const match=migrated.items.find(item=>item.name===name);
+          if(match)match.enabled=!!enabled;
+        });
+      }
+      saveTemplateSettings(migrated);return migrated;
+    }
+  }catch(error){console.warn('Template settings could not be loaded',error)}
+  return JSON.parse(JSON.stringify(DEFAULT_TEMPLATE_SETTINGS));
 }
 function saveTemplateSettings(settings){localStorage.setItem(TEMPLATE_SETTINGS_KEY,JSON.stringify(settings));}
-function categoryLabel(category){return ({services:'Services',audio:'Audio',lighting:'Lighting',effects:'Effects',entertainment:'Entertainment'})[category]||'Other';}
-function templateItemCard(item){return `<div class="template-item-row" data-template-item="${escapeHtml(item.id)}"><label class="template-item-main"><input type="checkbox" name="templateItemEnabled" value="${escapeHtml(item.id)}" ${item.enabled?'checked':''}><span><strong>${escapeHtml(item.name)}</strong><small>${item.protected?'Built-in item · can be disabled':'Custom item'}</small></span></label><div class="template-item-visibility"><label title="Show in consultations"><input type="checkbox" name="templateItemConsultation" value="${escapeHtml(item.id)}" ${item.consultation?'checked':''}> Consultation</label><label title="Show in planning"><input type="checkbox" name="templateItemPlanning" value="${escapeHtml(item.id)}" ${item.planning?'checked':''}> Planning</label></div>${item.protected?'<span class="protected-item" title="Protected Galaxy Cue item">Protected</span>':`<button class="template-delete" type="button" data-delete-template-item="${escapeHtml(item.id)}" aria-label="Delete ${escapeHtml(item.name)}">×</button>`}</div>`;}
+function templateItemsFor(context){return loadTemplateSettings().items.filter(item=>item.enabled&&item[context]);}
+function renderDynamicTemplateChoices(context){
+  const items=templateItemsFor(context);if(!items.length)return'';
+  const categories={services:'Services',audio:'Audio',lighting:'Lighting',effects:'Effects',entertainment:'Entertainment',other:'Other'};
+  const grouped=items.reduce((acc,item)=>{(acc[item.category]||(acc[item.category]=[])).push(item);return acc},{});
+  return `<section class="dynamic-template-panel"><div class="section-title"><div><small>Configured for this business</small><h2>Services & Production</h2></div><span class="autosave-chip">Saved automatically</span></div><p class="settings-note">Only items enabled in Settings appear here.</p><div class="dynamic-template-groups">${Object.entries(grouped).map(([category,rows])=>`<fieldset><legend>${categories[category]||category}</legend><div class="dynamic-option-grid">${rows.map(item=>`<label class="dynamic-option"><input type="checkbox" name="template_${context}_${item.id}" value="${escapeHtml(item.name)}"><span><strong>${escapeHtml(item.name)}</strong>${item.equipmentRequired?'<small>Equipment-related</small>':''}</span></label>`).join('')}</div></fieldset>`).join('')}</div></section>`;
+}
 function renderTemplateCard(item){return `<button class="v9-template-card" data-module="${item.id}"><span class="v9-template-icon">${item.icon}</span><div><small>${item.type}</small><h2>${item.title}</h2><p>${item.description}</p></div><em>Open form →</em></button>`;}
 function renderConsultationHub(){
   const settings=loadTemplateSettings();
@@ -748,7 +761,6 @@ function renderConsultationHub(){
   main.innerHTML=`<section class="dash-hero compact-hero"><div><div class="eyebrow">Business OS · Work</div><h1>Event Consultations</h1><p>Start with the right consultation form for each event type. Your enabled services and equipment appear automatically.</p></div><button class="btn" data-view="settings">Configure Templates</button></section>
   <section class="v9-template-grid">${items.map(renderTemplateCard).join('')||'<div class="empty-state">No consultation templates are enabled. Open Settings to activate one.</div>'}</section>
   <section class="v9-template-note"><strong>Template-driven forms</strong><p>Changes made under Settings → Form Templates apply to every new consultation. Add equipment when your inventory grows, or hide services you do not offer.</p></section>`;
-  main.querySelectorAll('[data-module]').forEach(button=>button.addEventListener('click',()=>{state.active=button.dataset.module;appView='workspace';shell();}));
   main.querySelector('[data-view="settings"]')?.addEventListener('click',()=>navigateToView('settings'));
 }
 function renderPlanningHub(){
@@ -763,7 +775,6 @@ function renderPlanningHub(){
   main.innerHTML=`<section class="dash-hero compact-hero"><div><div class="eyebrow">Business OS · Work</div><h1>Event Planning</h1><p>Turn consultation details into a complete operational plan for the event team.</p></div><button class="btn" data-view="settings">Configure Templates</button></section>
   <section class="v9-template-grid">${items.map(renderTemplateCard).join('')||'<div class="empty-state">No planning templates are enabled. Open Settings to activate one.</div>'}</section>
   <section class="v9-template-note"><strong>One connected event workflow</strong><p>Consultation information stays with the event and pre-fills the matching planning workspace, reducing duplicate entry.</p></section>`;
-  main.querySelectorAll('[data-module]').forEach(button=>button.addEventListener('click',()=>{state.active=button.dataset.module;appView='workspace';shell();}));
   main.querySelector('[data-view="settings"]')?.addEventListener('click',()=>navigateToView('settings'));
 }
 
@@ -1584,7 +1595,7 @@ function renderClientPortal(){
             ${portalStep('Consultation',Object.keys(activeConsultation()).length>0,'Tell us about your event')}
             ${portalStep('Quote',!!quote&&quote.status==='Accepted',quote?quote.status:'Waiting')}
             ${portalStep('Contract',!!contract&&contract.status==='Signed',contract?contract.status:'Waiting')}
-            ${portalStep('Music Planner',Object.keys(planner).length>0,Object.keys(planner).length?'In progress':'Not started')}
+            ${portalStep('Event Planning',Object.keys(planner).length>0,Object.keys(planner).length?'In progress':'Not started')}
             ${portalStep('Final Timeline',Object.keys(state.forms.timeline||{}).length>0,Object.keys(state.forms.timeline||{}).length?'In progress':'Not started')}
           </div>
         </article>
@@ -1636,7 +1647,7 @@ function nextPortalModule(){
 }
 function nextPortalStep(){
   const module=nextPortalModule();
-  const labels={wedding:'Complete your consultation',corporate:'Complete your consultation',private:'Complete your consultation',quote:'Review your quote',contract:'Review your contract','wedding-planner':'Complete your music planner',timeline:'Review your timeline'};
+  const labels={wedding:'Complete your consultation',corporate:'Complete your consultation',private:'Complete your consultation',quote:'Review your quote',contract:'Review your contract','wedding-planner':'Complete your event planning',timeline:'Review your timeline'};
   return labels[module]||'You’re all caught up';
 }
 function nextPortalMessage(){
@@ -1667,13 +1678,24 @@ function bindPortalPaymentButtons(){
   if(card)card.addEventListener('click',()=>window.open(businessSettings.cardPaymentUrl,'_blank','noopener'));
   document.querySelectorAll('[data-payment-submitted]').forEach(b=>b.addEventListener('click',()=>{const invoice=crmInvoices.find(i=>i.id===b.dataset.paymentSubmitted);if(!invoice)return;crmPayments.unshift({id:crypto.randomUUID(),invoiceId:invoice.id,amountCents:invoiceBalance(invoice),method:businessSettings.venmoHandle?'Venmo':'Other',status:'Submitted',reference:state.bookingId,note:'Client reported payment through portal.',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});saveLocalRows(PAYMENTS_KEY,crmPayments);renderClientPortal();toast('Payment submitted for verification')}));
 }
+function openTemplateItemModal(){
+  document.querySelector('#templateItemModal')?.remove();
+  const modal=document.createElement('div');modal.id='templateItemModal';modal.className='auth-modal';
+  modal.innerHTML=`<form class="auth-card template-item-modal"><button type="button" class="auth-close" data-close-template-modal>×</button><div class="eyebrow">Form Builder</div><h2>Add Custom Item</h2><p>Create a service or production option for this business.</p><label><span>Item name *</span><input name="name" required placeholder="Cold Sparks"></label><label><span>Category *</span><select name="category" required><option value="services">Services</option><option value="audio">Audio</option><option value="lighting">Lighting</option><option value="effects">Effects</option><option value="entertainment">Entertainment</option><option value="other">Other</option></select></label><div class="modal-check-grid"><label><input type="checkbox" name="consultation" checked> Show in Consultation</label><label><input type="checkbox" name="planning" checked> Show in Planning</label><label><input type="checkbox" name="enabled" checked> Enabled</label><label><input type="checkbox" name="equipmentRequired"> Equipment-related</label></div><label><span>Optional notes</span><textarea name="notes" rows="3"></textarea></label><div class="modal-actions"><button type="button" class="btn" data-close-template-modal>Cancel</button><button type="submit" class="btn primary">Add Item</button></div></form>`;
+  document.body.appendChild(modal);modal.querySelectorAll('[data-close-template-modal]').forEach(button=>button.addEventListener('click',()=>modal.remove()));modal.addEventListener('click',event=>{if(event.target===modal)modal.remove()});
+  modal.querySelector('form').addEventListener('submit',event=>{event.preventDefault();const fd=new FormData(event.currentTarget);const name=String(fd.get('name')||'').trim();if(!name)return;const settings=loadTemplateSettings();let id=slugifyTemplateItem(name);while(settings.items.some(item=>item.id===id))id=`${id}-${Date.now()}`;settings.items.push({id,name,category:String(fd.get('category')||'other'),enabled:fd.get('enabled')==='on',consultation:fd.get('consultation')==='on',planning:fd.get('planning')==='on',equipmentRequired:fd.get('equipmentRequired')==='on',notes:String(fd.get('notes')||''),protected:false});saveTemplateSettings(settings);modal.remove();renderSettings();toast(`${name} added`)});
+}
+function deleteTemplateItem(id){
+  const settings=loadTemplateSettings();const item=settings.items.find(row=>row.id===id);if(!item||item.protected)return toast('Built-in items cannot be deleted');
+  if(!confirm(`Delete custom item “${item.name}”?\n\nThis action cannot be undone.`))return;
+  settings.items=settings.items.filter(row=>row.id!==id);saveTemplateSettings(settings);renderSettings();toast(`${item.name} deleted`);
+}
 function renderSettings(){
   const main=document.querySelector('#main');
-  const templateSettings=loadTemplateSettings();
-  main.innerHTML=`<section class="dash-hero compact-hero"><div><div class="eyebrow">Business Setup</div><h1>Settings</h1><p>Configure your business identity, payments and the services that appear throughout consultation and planning.</p></div></section>
+  main.innerHTML=`<section class="dash-hero compact-hero"><div><div class="eyebrow">Business Setup</div><h1>Settings</h1><p>Your business name appears on client-facing portals and documents. Galaxy Cue branding stays consistent.</p></div></section>
   <form id="businessSettingsForm" class="settings-layout">
     <section class="settings-card"><div class="section-title"><div><small>Identity</small><h2>Business Information</h2></div></div>
-      <label><span>Business / entertainment name *</span><input name="businessName" required value="${escapeHtml(businessSettings.businessName||'')}"></label>
+      <label><span>Business / DJ / entertainment name *</span><input name="businessName" required value="${escapeHtml(businessSettings.businessName||'')}"></label>
       <div class="editor-grid"><label><span>Contact email</span><input type="email" name="contactEmail" value="${escapeHtml(businessSettings.contactEmail||'')}"></label><label><span>Phone</span><input name="contactPhone" value="${escapeHtml(businessSettings.contactPhone||'')}"></label></div>
       <label><span>Website</span><input name="website" value="${escapeHtml(businessSettings.website||'')}" placeholder="https://example.com"></label>
     </section>
@@ -1681,43 +1703,43 @@ function renderSettings(){
       <label><span>Venmo Business handle</span><input name="venmoHandle" value="${escapeHtml(businessSettings.venmoHandle||'')}" placeholder="@yourbusiness"></label>
       <label><span>Hosted card-payment URL</span><input name="cardPaymentUrl" value="${escapeHtml(businessSettings.cardPaymentUrl||'')}" placeholder="https://secure-payment-page.example"></label>
       <label><span>Payment instructions</span><textarea name="paymentInstructions" rows="5">${escapeHtml(businessSettings.paymentInstructions||'')}</textarea></label>
-      <p class="settings-note">Galaxy Cue never collects or stores card numbers. Card payments should open a secure hosted checkout page.</p>
+      <p class="settings-note">Galaxy Cue never collects or stores card numbers. Credit-card payments should open a secure hosted checkout page.</p>
     </section>
     <section class="settings-card settings-preview"><div class="section-title"><div><small>Preview</small><h2>Client-facing identity</h2></div></div>
       <div class="business-preview"><span>${escapeHtml((businessSettings.businessName||'G').charAt(0).toUpperCase())}</span><div><strong>${escapeHtml(businessSettings.businessName||'Your Entertainment Company')}</strong><small>Powered by Galaxy Cue</small></div></div>
       <button class="btn full" type="button" data-preview-portal>Preview Client Portal</button>
     </section>
-    <section class="settings-card settings-template-manager"><div class="section-title"><div><small>Dynamic templates</small><h2>Template Settings</h2></div><button class="btn compact primary" type="button" data-add-template-item>＋ Add Custom Item</button></div>
-      <p class="settings-note">Built-in items are protected and can be enabled or disabled. Custom items receive a red × delete button and require confirmation before removal.</p>
-      <div class="template-settings-block"><h3>Consultation Templates</h3><div class="template-toggle-grid">
-        ${Object.entries({wedding:'Wedding Consultation',corporate:'Corporate Consultation',private:'Private Event Consultation'}).map(([key,label])=>`<label class="template-toggle"><input type="checkbox" name="consultationType" value="${key}" ${templateSettings.consultationTypes[key]!==false?'checked':''}><span>${label}</span></label>`).join('')}
+    <section class="settings-card settings-template-manager"><div class="section-title"><div><small>Form builder</small><h2>Template Settings</h2></div><button class="btn primary compact" type="button" data-add-template-item>＋ Add Custom Item</button></div>
+      <p class="settings-note">Built-in Galaxy Cue items can be enabled or disabled. Only custom items display the red delete button.</p>
+      <div class="template-settings-block"><h3>Consultation forms</h3><div class="template-toggle-grid">
+        ${Object.entries({wedding:'Wedding Consultation',corporate:'Corporate Consultation',private:'Private Event Consultation'}).map(([key,label])=>`<label class="template-toggle"><input type="checkbox" name="consultationType" value="${key}" ${loadTemplateSettings().consultationTypes[key]!==false?'checked':''}><span>${label}</span></label>`).join('')}
       </div></div>
-      <div class="template-settings-block"><h3>Planning Templates</h3><div class="template-toggle-grid">
-        ${Object.entries({wedding:'Wedding Event Planning',corporate:'Corporate Event Planning',private:'Private Event Planning',timeline:'Universal Timeline Builder'}).map(([key,label])=>`<label class="template-toggle"><input type="checkbox" name="planningType" value="${key}" ${templateSettings.planningTypes[key]!==false?'checked':''}><span>${label}</span></label>`).join('')}
+      <div class="template-settings-block"><h3>Event planning forms</h3><div class="template-toggle-grid">
+        ${Object.entries({wedding:'Wedding Event Planning',corporate:'Corporate Event Planning',private:'Private Event Planning',timeline:'Universal Timeline Builder'}).map(([key,label])=>`<label class="template-toggle"><input type="checkbox" name="planningType" value="${key}" ${loadTemplateSettings().planningTypes[key]!==false?'checked':''}><span>${label}</span></label>`).join('')}
       </div></div>
-      <div class="template-category-list">${TEMPLATE_CATEGORIES.map((category,index)=>{const items=templateSettings.items.filter(item=>item.category===category);return `<details class="template-category" ${index===0?'open':''}><summary><span><strong>${categoryLabel(category)}</strong><small>${items.filter(item=>item.enabled).length} enabled · ${items.length} total</small></span><em>Manage</em></summary><div class="template-category-body">${items.map(templateItemCard).join('')||'<p class="settings-note">No items in this category.</p>'}</div></details>`}).join('')}</div>
+      <div class="template-category-list">${Object.entries({services:'Services',audio:'Audio',lighting:'Lighting',effects:'Effects',entertainment:'Entertainment',other:'Other'}).map(([category,label])=>{const rows=loadTemplateSettings().items.filter(item=>item.category===category);if(!rows.length)return'';return `<details class="template-category" open><summary><span>${label}</span><em>${rows.filter(item=>item.enabled).length} active</em></summary><div class="template-item-list">${rows.map(item=>`<div class="template-item-row" data-template-id="${escapeHtml(item.id)}"><label class="template-item-main"><input type="checkbox" name="templateEnabled" value="${escapeHtml(item.id)}" ${item.enabled?'checked':''}><span><strong>${escapeHtml(item.name)}</strong><small>${item.protected?'Built-in item':'Custom item'}</small></span></label><label class="mini-check"><input type="checkbox" name="templateConsultation" value="${escapeHtml(item.id)}" ${item.consultation?'checked':''}>Consultation</label><label class="mini-check"><input type="checkbox" name="templatePlanning" value="${escapeHtml(item.id)}" ${item.planning?'checked':''}>Planning</label>${item.protected?'<span class="protected-chip">Protected</span>':`<button type="button" class="delete-template-item" data-delete-template-item="${escapeHtml(item.id)}" aria-label="Delete ${escapeHtml(item.name)}">×</button>`}</div>`).join('')}</div></details>`}).join('')}</div>
     </section>
     <section class="settings-card build-card"><div class="section-title"><div><small>About this deployment</small><h2>Build Information</h2></div></div>
       <div class="build-grid"><div><span>Version</span><strong>${escapeHtml(galaxyCueRuntime.version)}</strong></div><div><span>Build</span><strong>${escapeHtml(galaxyCueRuntime.build)}</strong></div><div><span>Release</span><strong>${escapeHtml(galaxyCueRuntime.release)}</strong></div><div><span>Mode</span><strong>${currentUser?'Cloud':'Local'}</strong></div></div>
       <button class="btn full" type="button" data-action="force-refresh">Clear Cache & Reload Latest Build</button>
+      <p class="settings-note">The version button in the top-right always shows the JavaScript build currently running in this browser.</p>
     </section>
     <button class="btn primary settings-save" type="submit">Save Business Settings</button>
   </form>`;
   const form=document.querySelector('#businessSettingsForm');
-  form?.addEventListener('submit',async event=>{event.preventDefault();const fd=new FormData(form);businessSettings={businessName:String(fd.get('businessName')||''),contactEmail:String(fd.get('contactEmail')||''),contactPhone:String(fd.get('contactPhone')||''),website:String(fd.get('website')||''),venmoHandle:String(fd.get('venmoHandle')||''),cardPaymentUrl:String(fd.get('cardPaymentUrl')||''),paymentInstructions:String(fd.get('paymentInstructions')||'')};saveBusinessSettings(businessSettings);
-    const settings=loadTemplateSettings();settings.consultationTypes={wedding:false,corporate:false,private:false};form.querySelectorAll('input[name="consultationType"]:checked').forEach(input=>settings.consultationTypes[input.value]=true);settings.planningTypes={wedding:false,corporate:false,private:false,timeline:false};form.querySelectorAll('input[name="planningType"]:checked').forEach(input=>settings.planningTypes[input.value]=true);
-    settings.items=settings.items.map(item=>({...item,enabled:Boolean(form.querySelector(`input[name="templateItemEnabled"][value="${CSS.escape(item.id)}"]`)?.checked),consultation:Boolean(form.querySelector(`input[name="templateItemConsultation"][value="${CSS.escape(item.id)}"]`)?.checked),planning:Boolean(form.querySelector(`input[name="templateItemPlanning"][value="${CSS.escape(item.id)}"]`)?.checked)}));saveTemplateSettings(settings);
-    if(currentUser&&activeBusinessId()){const {error}=await saveCloudBusinessSettings(businessSettings,activeBusinessId());if(error)return toast(`Saved locally — cloud sync failed: ${error.message}`)}renderSettings();toast(currentUser?'Business and template settings saved and synced':'Business and template settings saved locally')});
-  document.querySelector('[data-add-template-item]')?.addEventListener('click',openCustomTemplateItemModal);
-  document.querySelectorAll('[data-delete-template-item]').forEach(button=>button.addEventListener('click',()=>deleteCustomTemplateItem(button.dataset.deleteTemplateItem)));
-  document.querySelector('[data-preview-portal]')?.addEventListener('click',()=>{appView='client-portal';portalPreviewMode=true;shell()});
+  if(form)form.addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(form);businessSettings={businessName:String(fd.get('businessName')||''),contactEmail:String(fd.get('contactEmail')||''),contactPhone:String(fd.get('contactPhone')||''),website:String(fd.get('website')||''),venmoHandle:String(fd.get('venmoHandle')||''),cardPaymentUrl:String(fd.get('cardPaymentUrl')||''),paymentInstructions:String(fd.get('paymentInstructions')||'')};saveBusinessSettings(businessSettings);
+    const templateSettings=loadTemplateSettings();
+    templateSettings.consultationTypes={wedding:false,corporate:false,private:false};
+    form.querySelectorAll('input[name="consultationType"]:checked').forEach(input=>templateSettings.consultationTypes[input.value]=true);
+    templateSettings.planningTypes={wedding:false,corporate:false,private:false,timeline:false};
+    form.querySelectorAll('input[name="planningType"]:checked').forEach(input=>templateSettings.planningTypes[input.value]=true);
+    templateSettings.items.forEach(item=>{item.enabled=!!form.querySelector(`input[name="templateEnabled"][value="${CSS.escape(item.id)}"]`)?.checked;item.consultation=!!form.querySelector(`input[name="templateConsultation"][value="${CSS.escape(item.id)}"]`)?.checked;item.planning=!!form.querySelector(`input[name="templatePlanning"][value="${CSS.escape(item.id)}"]`)?.checked;});
+    saveTemplateSettings(templateSettings);
+    if(currentUser&&activeBusinessId()){const {error}=await saveCloudBusinessSettings(businessSettings,activeBusinessId());if(error)return toast(`Saved locally — cloud sync failed: ${error.message}`)}renderSettings();toast(currentUser?'Business settings saved and synced':'Business settings saved locally')});
+  document.querySelector('[data-add-template-item]')?.addEventListener('click',()=>openTemplateItemModal());
+  document.querySelectorAll('[data-delete-template-item]').forEach(button=>button.addEventListener('click',()=>deleteTemplateItem(button.dataset.deleteTemplateItem)));
+  const preview=document.querySelector('[data-preview-portal]');if(preview)preview.addEventListener('click',()=>{appView='client-portal';portalPreviewMode=true;shell()});
 }
-function openCustomTemplateItemModal(){
-  document.querySelector('#customTemplateItemModal')?.remove();
-  const modal=document.createElement('div');modal.id='customTemplateItemModal';modal.className='auth-modal';modal.innerHTML=`<form class="auth-card custom-item-card" id="customTemplateItemForm"><button class="auth-close" type="button" data-close-custom-item>×</button><div class="eyebrow">Template Settings</div><h2>Add Custom Item</h2><p>Create a service or equipment option for your own business.</p><label><span>Item name *</span><input name="name" required placeholder="Example: Cold Sparks"></label><label><span>Category *</span><select name="category" required>${TEMPLATE_CATEGORIES.map(category=>`<option value="${category}">${categoryLabel(category)}</option>`).join('')}</select></label><div class="custom-item-options"><label class="template-toggle"><input type="checkbox" name="consultation" checked><span>Show in Consultation</span></label><label class="template-toggle"><input type="checkbox" name="planning" checked><span>Show in Planning</span></label><label class="template-toggle"><input type="checkbox" name="enabled" checked><span>Enabled by default</span></label></div><label><span>Optional notes</span><textarea name="notes" rows="3" placeholder="Internal description or requirements"></textarea></label><div class="section-actions"><button class="btn" type="button" data-close-custom-item>Cancel</button><button class="btn primary" type="submit">Add Item</button></div></form>`;document.body.appendChild(modal);
-  modal.querySelectorAll('[data-close-custom-item]').forEach(button=>button.addEventListener('click',()=>modal.remove()));modal.addEventListener('click',event=>{if(event.target===modal)modal.remove()});modal.querySelector('form').addEventListener('submit',event=>{event.preventDefault();const fd=new FormData(event.currentTarget);const name=String(fd.get('name')||'').trim();if(!name)return;const settings=loadTemplateSettings();if(settings.items.some(item=>item.name.toLowerCase()===name.toLowerCase()))return toast('An item with this name already exists');settings.items.push({id:`custom-${crypto.randomUUID()}`,name,category:String(fd.get('category')||'entertainment'),enabled:fd.get('enabled')==='on',consultation:fd.get('consultation')==='on',planning:fd.get('planning')==='on',protected:false,equipmentRelevant:['audio','lighting','effects'].includes(String(fd.get('category'))),notes:String(fd.get('notes')||'')});saveTemplateSettings(settings);modal.remove();renderSettings();toast(`${name} added`)});
-}
-function deleteCustomTemplateItem(id){const settings=loadTemplateSettings();const item=settings.items.find(entry=>entry.id===id);if(!item||item.protected)return toast('Built-in Galaxy Cue items cannot be deleted');if(!confirm(`Delete Custom Item\n\nAre you sure you want to permanently delete “${item.name}”?\n\nThis action cannot be undone.`))return;settings.items=settings.items.filter(entry=>entry.id!==id);saveTemplateSettings(settings);renderSettings();toast(`${item.name} deleted`);}
 
 function renderSectionView(title,description,icon){
   const main=document.querySelector('#main');
@@ -2208,10 +2230,46 @@ function workspaceOverview(){
     <div><small>Contract</small><strong>${escapeHtml(c.contractStatus||'Draft')}</strong></div>
   </div>`;
 }
-function renderMain(){const m=modules.find(x=>x.id===state.active);if(!m){state.active='wedding';return renderMain()}const main=document.querySelector('#main');main.className=`crm-main workspace-module workspace-module-${state.active}`;main.dataset.workspaceModule=state.active;const overview=workspaceOverview();main.innerHTML=`<section class="hero workspace-hero"><div><button class="text-button back-dashboard" data-view="dashboard">← Dashboard</button><div class="eyebrow">Current Event · ${state.bookingId}</div><h1>${m.label}</h1><p>${m.description} ${currentUser?'Changes save and sync automatically while you are signed in.':'Your information is currently stored only in this browser.'}</p></div><div class="workspace-save-state"><span></span>${currentUser?'Cloud autosave ready':'Local autosave'}</div></section>${overview}<div class="booking-strip"><div class="ref"><small>Event Reference</small><br><strong>${state.bookingId}</strong></div><div class="actions"><button class="btn" data-action="save">${currentUser?'Save & Sync Now':'Save Local'}</button><button class="btn primary" data-action="cloud-sync">${currentUser?'Sync Now':'Sign in to Sync'}</button><button class="btn" data-action="cloud-load">Load Cloud</button><button class="btn" data-action="export">Export JSON</button><button class="btn danger" data-action="reset">New Event</button></div></div><div class="progress-wrap"><div class="progress-head"><span>Form completion</span><span id="progressText">0%</span></div><div class="progress"><span id="progressBar"></span></div></div><div id="module"></div><div class="footer-note">Galaxy Cue · Operating system for entertainment companies</div>`;
-  main.querySelector('[data-view="dashboard"]')?.addEventListener('click',()=>navigateToView('dashboard'));renderModule();bindNav();bindActions();}
-
-function portal(){const d=activeConsultation(),q=state.forms.quote||{},c=state.forms.contract||{},t=quoteTotals(q),plannerId=plannerForBooking(),eventDate=d.eventDate||q.eventDate||'',days=daysUntil(eventDate),planner=plannerId?state.forms[plannerId]||{}:{},plannerLabel=plannerId?modules.find(x=>x.id===plannerId).label:'Music Planner';return `<div class="card portal-hero"><div><div class="eyebrow">Client Booking Overview</div><h2>${d.primaryClient||q.clientName||'Your Event'}</h2><p class="card-intro">Everything currently saved for booking <strong>${state.bookingId}</strong>.</p></div><div class="countdown"><small>Event Countdown</small><strong>${days===null?'—':days<0?'Past event':days===0?'Today':days+' days'}</strong><span>${eventDate||'Date not set'}</span></div></div><div class="card"><h2>Booking Snapshot</h2><div class="summary-grid"><div class="stat"><small>Event Date</small><strong style="font-size:17px">${eventDate||'—'}</strong></div><div class="stat"><small>Venue</small><strong style="font-size:17px">${d.venueName||q.venueName||'—'}</strong></div><div class="stat"><small>Planner</small><strong style="font-size:17px">${plannerId?(state.completed.includes(plannerId)?'Completed':'In progress'):'Not selected'}</strong></div></div></div><div class="card"><h2>Quote & Payment</h2><div class="summary-grid"><div class="stat"><small>Quote Status</small><strong>${q.quoteStatus||'Not created'}</strong></div><div class="stat"><small>Total</small><strong>${money(t.total)}</strong></div><div class="stat"><small>Deposit Due</small><strong>${money(t.deposit)}</strong></div><div class="stat"><small>Contract Status</small><strong style="font-size:17px">${c.contractStatus||'Draft'}</strong></div><div class="stat"><small>Deposit Received</small><strong>${money(c.depositPaid)}</strong></div><div class="stat"><small>Balance Remaining</small><strong>${money(Math.max(0,t.total-(Number(c.depositPaid)||0)))}</strong></div></div></div><div class="card"><h2>Workflow Progress</h2><div class="workflow-list">${['wedding','corporate','private','quote','contract','wedding-planner','corporate-planner','private-planner'].filter(id=>!id.includes('planner')||id===plannerId).map(id=>{const m=modules.find(x=>x.id===id);return `<button class="workflow-item" data-nav="${id}"><span>${m.label}</span><strong class="${state.completed.includes(id)?'done':''}">${state.completed.includes(id)?'Completed':state.forms[id]?'In progress':'Not started'}</strong></button>`}).join('')}</div><div class="section-actions"><button class="btn" data-action="print-summary">Print Event Summary</button>${plannerId?`<button class="btn primary" data-nav="${plannerId}">Open ${plannerLabel}</button>`:''}</div></div><div class="card"><h2>Music Planner Preview</h2>${plannerId&&Object.keys(planner).length?`<div class="admin-list"><div><span>Must-play songs</span><strong>${planner.mustPlay?'Added':'Not added'}</strong></div><div><span>Do-not-play list</span><strong>${planner.doNotPlay?'Added':'Not added'}</strong></div><div><span>Timeline / run of show</span><strong>${planner.timeline||planner.receptionTimeline||planner.runOfShow?'Added':'Not added'}</strong></div><div><span>Announcements / cues</span><strong>${planner.announcements||planner.ceremonyNotes||planner.avNotes?'Added':'Not added'}</strong></div></div>`:'<p class="card-intro">No music-planner information has been entered yet.</p>'}</div>`}
+function renderMain(){
+  const m=modules.find(x=>x.id===state.active)||modules[0];
+  const main=document.querySelector('#main');
+  main.className=`crm-main workspace-module workspace-module-${state.active}`;
+  main.dataset.workspaceModule=state.active;
+  const overview=workspaceOverview();
+  const context=['wedding','corporate','private'].includes(state.active)?'consultation':['wedding-planner','corporate-planner','private-planner'].includes(state.active)?'planning':null;
+  main.innerHTML=`<section class="hero workspace-hero"><div><button class="text-button back-dashboard" data-view="${context==='planning'?'planning':context==='consultation'?'consultations':'dashboard'}">← Back</button><div class="eyebrow">Current Event · ${state.bookingId}</div><h1>${m.label}</h1><p>${m.description} ${currentUser?'Changes save and sync automatically while you are signed in.':'Changes save automatically in this browser.'}</p></div></section>${overview}<div class="booking-strip"><div class="ref"><small>Event Reference</small><br><strong>${state.bookingId}</strong></div><div class="actions"><span class="autosave-chip">● Saved locally</span><button class="btn" data-action="save">Save Now</button><button class="btn primary" data-action="cloud-sync">${currentUser?'Sync Now':'Sign in to Sync'}</button></div></div>${context?renderDynamicTemplateChoices(context):''}<div id="module"></div><div class="footer-note">Galaxy Cue · Entertainment Company Operating System</div>`;
+  const host=document.querySelector('#module'),source=activeConsultation();
+  host.className=`module-host module-${state.active}`;host.dataset.module=state.active;
+  if(state.active==='wedding')host.innerHTML=weddingForm();
+  else if(state.active==='corporate')host.innerHTML=corporateForm();
+  else if(state.active==='private')host.innerHTML=privateForm();
+  else if(state.active==='quote')host.innerHTML=quoteForm(source);
+  else if(state.active==='contract')host.innerHTML=contractForm(state.forms.quote||{},source);
+  else if(state.active==='wedding-planner')host.innerHTML=weddingPlannerForm(state.forms.wedding||source);
+  else if(state.active==='corporate-planner')host.innerHTML=corporatePlannerForm(state.forms.corporate||source);
+  else if(state.active==='private-planner')host.innerHTML=privatePlannerForm(state.forms.private||source);
+  else if(state.active==='timeline')host.innerHTML=timelineForm();
+  else if(state.active==='uploads')host.innerHTML=uploadsView();
+  else if(state.active==='messages')host.innerHTML=messagesView();
+  else if(state.active==='portal')host.innerHTML=portal();
+  else if(state.active==='admin')host.innerHTML=admin();
+  else host.innerHTML=comingSoon(m);
+  if(state.active==='timeline')renderTimelineRows();if(state.active==='uploads')renderUploads();if(state.active==='messages')renderMessages();
+  const form=host.querySelector('form');
+  if(form){
+    const saved={...(state.forms[state.active]||{}),...(state.forms[`template-${context}`]||{})};fill(form,saved);
+    document.querySelectorAll('.dynamic-template-panel input').forEach(input=>{if(Array.isArray(saved[input.name]))input.checked=saved[input.name].includes(input.value);else input.checked=!!saved[input.name];input.addEventListener('change',()=>{const templateForm=document.querySelector('.dynamic-template-panel');const templateData={};templateForm?.querySelectorAll('input').forEach(el=>templateData[el.name]=el.checked);state.forms[`template-${context}`]=templateData;save(false);});});
+    form.addEventListener('input',()=>{state.forms[state.active]=dataFrom(form);save(false);if(state.active==='quote')updateQuoteTotals();if(state.active==='contract')updateContractTotals()});
+    form.addEventListener('submit',e=>{e.preventDefault();if(!form.reportValidity())return;state.forms[state.active]=dataFrom(form);if(!state.completed.includes(state.active))state.completed.push(state.active);save();toast('Workspace completed');renderMain()});
+    if(state.active==='quote')updateQuoteTotals();if(state.active==='contract')updateContractTotals();
+  }
+  bindActions();bindWorkflowActions();bindNav();
+}
+function updateQuoteTotals(){const form=document.querySelector('form[data-form="quote"]');if(!form)return;const q=dataFrom(form),t=quoteTotals(q);[['subtotalValue',t.subtotal],['discountValue',-t.discount],['taxValue',t.tax],['totalValue',t.total],['depositValue',t.deposit],['balanceValue',t.balance]].forEach(([id,v])=>{const el=document.getElementById(id);if(el)el.textContent=money(v)})}
+function updateContractTotals(){const t=quoteTotals();document.querySelectorAll('[data-contract-total]').forEach(el=>el.textContent=money(t.total));document.querySelectorAll('[data-contract-deposit]').forEach(el=>el.textContent=money(t.deposit))}
+function daysUntil(date){if(!date)return null;const target=new Date(date+'T12:00:00'),today=new Date();today.setHours(0,0,0,0);return Math.ceil((target-today)/86400000)}
+function plannerForBooking(){if(state.forms.wedding&&Object.keys(state.forms.wedding).length)return 'wedding-planner';if(state.forms.corporate&&Object.keys(state.forms.corporate).length)return 'corporate-planner';if(state.forms.private&&Object.keys(state.forms.private).length)return 'private-planner';return null}
+function portal(){const d=activeConsultation(),q=state.forms.quote||{},c=state.forms.contract||{},t=quoteTotals(q),plannerId=plannerForBooking(),eventDate=d.eventDate||q.eventDate||'',days=daysUntil(eventDate),planner=plannerId?state.forms[plannerId]||{}:{},plannerLabel=plannerId?modules.find(x=>x.id===plannerId).label:'Event Planning';return `<div class="card portal-hero"><div><div class="eyebrow">Client Booking Overview</div><h2>${d.primaryClient||q.clientName||'Your Event'}</h2><p class="card-intro">Everything currently saved for booking <strong>${state.bookingId}</strong>.</p></div><div class="countdown"><small>Event Countdown</small><strong>${days===null?'—':days<0?'Past event':days===0?'Today':days+' days'}</strong><span>${eventDate||'Date not set'}</span></div></div><div class="card"><h2>Booking Snapshot</h2><div class="summary-grid"><div class="stat"><small>Event Date</small><strong style="font-size:17px">${eventDate||'—'}</strong></div><div class="stat"><small>Venue</small><strong style="font-size:17px">${d.venueName||q.venueName||'—'}</strong></div><div class="stat"><small>Planner</small><strong style="font-size:17px">${plannerId?(state.completed.includes(plannerId)?'Completed':'In progress'):'Not selected'}</strong></div></div></div><div class="card"><h2>Quote & Payment</h2><div class="summary-grid"><div class="stat"><small>Quote Status</small><strong>${q.quoteStatus||'Not created'}</strong></div><div class="stat"><small>Total</small><strong>${money(t.total)}</strong></div><div class="stat"><small>Deposit Due</small><strong>${money(t.deposit)}</strong></div><div class="stat"><small>Contract Status</small><strong style="font-size:17px">${c.contractStatus||'Draft'}</strong></div><div class="stat"><small>Deposit Received</small><strong>${money(c.depositPaid)}</strong></div><div class="stat"><small>Balance Remaining</small><strong>${money(Math.max(0,t.total-(Number(c.depositPaid)||0)))}</strong></div></div></div><div class="card"><h2>Workflow Progress</h2><div class="workflow-list">${['wedding','corporate','private','quote','contract','wedding-planner','corporate-planner','private-planner'].filter(id=>!id.includes('planner')||id===plannerId).map(id=>{const m=modules.find(x=>x.id===id);return `<button class="workflow-item" data-nav="${id}"><span>${m.label}</span><strong class="${state.completed.includes(id)?'done':''}">${state.completed.includes(id)?'Completed':state.forms[id]?'In progress':'Not started'}</strong></button>`}).join('')}</div><div class="section-actions"><button class="btn" data-action="print-summary">Print Event Summary</button>${plannerId?`<button class="btn primary" data-nav="${plannerId}">Open ${plannerLabel}</button>`:''}</div></div><div class="card"><h2>Event Planning Preview</h2>${plannerId&&Object.keys(planner).length?`<div class="admin-list"><div><span>Must-play songs</span><strong>${planner.mustPlay?'Added':'Not added'}</strong></div><div><span>Do-not-play list</span><strong>${planner.doNotPlay?'Added':'Not added'}</strong></div><div><span>Timeline / run of show</span><strong>${planner.timeline||planner.receptionTimeline||planner.runOfShow?'Added':'Not added'}</strong></div><div><span>Announcements / cues</span><strong>${planner.announcements||planner.ceremonyNotes||planner.avNotes?'Added':'Not added'}</strong></div></div>`:'<p class="card-intro">No event-planning information has been entered yet.</p>'}</div>`}
 function admin(){const d=activeConsultation(),q=state.forms.quote||{},c=state.forms.contract||{},t=quoteTotals(q);return `<div class="card"><h2>Admin Dashboard</h2><p class="card-intro">Local demonstration dashboard for the active browser.</p><div class="summary-grid"><div class="stat"><small>Client</small><strong>${d.primaryClient||q.clientName||'—'}</strong></div><div class="stat"><small>Quote Total</small><strong>${money(t.total)}</strong></div><div class="stat"><small>Deposit Received</small><strong>${money(c.depositPaid)}</strong></div><div class="stat"><small>Quote Status</small><strong style="font-size:17px">${q.quoteStatus||'Draft'}</strong></div><div class="stat"><small>Contract Status</small><strong style="font-size:17px">${c.contractStatus||'Draft'}</strong></div><div class="stat"><small>Last Updated</small><strong style="font-size:14px">${new Date(state.updated).toLocaleString()}</strong></div></div></div><div class="card"><h2>Event Summary</h2><div class="admin-list"><div><span>Event date</span><strong>${d.eventDate||q.eventDate||'—'}</strong></div><div><span>Venue</span><strong>${d.venueName||q.venueName||'—'}</strong></div><div><span>Deposit status</span><strong>${c.depositStatus||'Not requested'}</strong></div><div><span>Remaining balance</span><strong>${money(Math.max(0,t.total-(Number(c.depositPaid)||0)))}</strong></div></div></div>`}
 function comingSoon(m){return `<div class="card empty"><div class="icon">${m.icon}</div><h2>${m.label}</h2><p class="card-intro">The navigation and data structure are prepared. This module is scheduled for the next build.</p><button class="btn primary" data-nav="wedding">Return to Consultation</button></div>`}
 function updateProgress(form){const n=pct(form);document.querySelector('#progressBar').style.width=n+'%';document.querySelector('#progressText').textContent=n+'%'}
@@ -2315,11 +2373,7 @@ async function bindGlobalActions(){
   }));
   document.querySelectorAll('[data-action="logout"]').forEach(b=>b.addEventListener('click',async()=>{await signOut();currentUser=null;cloudBookings=loadLocalEvents();eventCloudStatus='Local';shell();toast('Signed out')}));
   document.querySelectorAll('[data-action="command"]').forEach(b=>b.addEventListener('click',openCommand));
-  document.querySelectorAll('[data-action="business-login"]').forEach(button=>button.addEventListener('click',()=>{
-    const url=new URL('client-portal.html',window.location.href);
-    if(activeBusinessId())url.searchParams.set('business',activeBusinessId());
-    window.open(url.toString(),'_blank','noopener');
-  }));
+  document.querySelectorAll('[data-action="business-login"]').forEach(button=>button.addEventListener('click',()=>document.querySelector('#authModal')?.classList.remove('hidden')));
   document.querySelectorAll('[data-action="client-portal"]').forEach(button=>button.addEventListener('click',()=>{
     portalPreviewMode=true;
     navigateToView('client-portal');
