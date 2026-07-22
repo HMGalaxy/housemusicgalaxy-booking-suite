@@ -1,4 +1,11 @@
-# Galaxy Cue v10.0.3
+# Galaxy Cue v10.0.4
+
+- Fixed Save Now reverting current form edits.
+- Unified type-aware restoration for radio buttons and checkbox groups.
+- Fixed dynamic template serialization.
+- Protected linked events from accidental client deletion.
+- Corrected legacy single-name client normalization.
+- Synchronized source and deployed Business OS bundles.
 
 - Unified client-card rendering across Clients, Consultation, and Planning.
 - Fixed contextual client save/delete behavior.

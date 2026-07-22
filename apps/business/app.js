@@ -1,7 +1,7 @@
-import {bootstrapGalaxyCue} from '../../shared/js/core/bootstrap.js?v=10003';
-import {ensureWorkflow,getWorkflowState,allowedActions,transitionWorkflow,workflowProgress,ACTION_LABELS,WORKFLOW_STATES} from '../../shared/js/core/workflow.js?v=10003';
+import {bootstrapGalaxyCue} from '../../shared/js/core/bootstrap.js?v=10004';
+import {ensureWorkflow,getWorkflowState,allowedActions,transitionWorkflow,workflowProgress,ACTION_LABELS,WORKFLOW_STATES} from '../../shared/js/core/workflow.js?v=10004';
 const galaxyCueRuntime=bootstrapGalaxyCue();
-import {modules,weddingForm,corporateForm,privateForm,quoteForm,contractForm,weddingPlannerForm,corporatePlannerForm,privatePlannerForm,timelineForm,uploadsView,messagesView} from '../../shared/js/modules.js?v=10003';
+import {modules,weddingForm,corporateForm,privateForm,quoteForm,contractForm,weddingPlannerForm,corporatePlannerForm,privatePlannerForm,timelineForm,uploadsView,messagesView} from '../../shared/js/modules.js?v=10004';
 let supabase=null;
 let getCurrentUser=async()=>null;
 let restoreAuthSession=async()=>({user:null,error:null,handled:false});
@@ -170,8 +170,9 @@ let crmClients=loadClients();
 
 function activeBusinessId(){return activeBusiness?.business_id||activeBusiness?.businesses?.id||null}
 function normalizeCloudClient(row){
-  const firstName=row.first_name||String(row.name||'').trim().split(/\s+/).slice(0,-1).join(' ');
-  const lastName=row.last_name||String(row.name||'').trim().split(/\s+/).slice(-1).join(' ');
+  const legacyParts=String(row.name||'').trim().split(/\s+/).filter(Boolean);
+  const firstName=row.first_name||(legacyParts.length>1?legacyParts.slice(0,-1).join(' '):(legacyParts[0]||''));
+  const lastName=row.last_name||(legacyParts.length>1?legacyParts.slice(-1).join(' '):'');
   return {
     id:row.id,
     firstName,
@@ -447,7 +448,7 @@ function dataFrom(form){
   return output;
 }
 
-function fill(form,data={}){Object.entries(data).forEach(([k,v])=>{const els=form.querySelectorAll(`[name="${CSS.escape(k)}"]`);els.forEach(el=>{if(el.type==='checkbox')el.checked=Array.isArray(v)?v.includes(el.value):!!v;else el.value=v??''})})}
+function fill(form,data={}){applySavedFormValues(form,data)}
 function pct(form){if(!form)return 0;const req=[...form.querySelectorAll('[required]')],ok=req.filter(x=>x.type==='checkbox'?x.checked:x.value.trim()).length;return req.length?Math.round(ok/req.length*100):0}
 function activeConsultation(){for(const id of ['wedding','corporate','private'])if(state.forms[id]&&Object.keys(state.forms[id]).length)return state.forms[id];return {}}
 function money(n){return new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Number(n)||0)}
@@ -1072,8 +1073,14 @@ function bindClientEditor(){
     bindClientEditor();
   }));
   document.querySelectorAll('[data-delete-client]').forEach(b=>b.addEventListener('click',async()=>{
-    if(!confirm('Delete this client record?'))return;
     const id=b.dataset.deleteClient;
+    const client=crmClients.find(item=>item.id===id);
+    const linkedEvents=client?eventsForClient(client):[];
+    if(linkedEvents.length){
+      toast(`This client has ${linkedEvents.length} linked event${linkedEvents.length===1?'':'s'}. Delete or reassign those events first.`);
+      return;
+    }
+    if(!confirm('Delete this client record?'))return;
     if(currentUser&&activeBusinessId()){
       clientCloudStatus='Saving…';
       const {error}=await removeCloudClient(id,activeBusinessId());
@@ -2303,7 +2310,7 @@ function renderMain(){
   const form=host.querySelector('form');
   if(form){
     const saved={...(state.forms[state.active]||{}),...(state.forms[`template-${context}`]||{})};fill(form,saved);
-    document.querySelectorAll('.dynamic-template-panel input').forEach(input=>{if(Array.isArray(saved[input.name]))input.checked=saved[input.name].includes(input.value);else input.checked=!!saved[input.name];input.addEventListener('change',()=>{const templateForm=document.querySelector('.dynamic-template-panel');const templateData={};templateForm?.querySelectorAll('input').forEach(el=>templateData[el.name]=el.checked);state.forms[`template-${context}`]=templateData;save(false);});});
+    document.querySelectorAll('.dynamic-template-panel input').forEach(input=>{if(Array.isArray(saved[input.name]))input.checked=saved[input.name].includes(input.value);else input.checked=saved[input.name]===true||String(saved[input.name])===String(input.value);input.addEventListener('change',()=>{const templateForm=document.querySelector('.dynamic-template-panel');if(!templateForm)return;state.forms[`template-${context}`]=dataFrom(templateForm);save(false);});});
     form.addEventListener('input',()=>{state.forms[state.active]=dataFrom(form);save(false);if(state.active==='quote')updateQuoteTotals();if(state.active==='contract')updateContractTotals()});
     form.addEventListener('submit',e=>{e.preventDefault();if(!form.reportValidity())return;state.forms[state.active]=dataFrom(form);if(!state.completed.includes(state.active))state.completed.push(state.active);save();toast('Workspace completed');renderMain()});
     if(state.active==='quote')updateQuoteTotals();if(state.active==='contract')updateContractTotals();
@@ -2334,7 +2341,7 @@ function bindNav(){
   });
 }
 function bindActions(){document.querySelectorAll('[data-action="save"]').forEach(b=>b.addEventListener('click',()=>{const f=document.querySelector('form');
-  if(f)applySavedFormValues(f,state.forms?.[state.active]||{});if(f)state.forms[state.active]=dataFrom(f);save()}));document.querySelectorAll('[data-action="cloud-sync"]').forEach(b=>b.addEventListener('click',cloudSync));document.querySelectorAll('[data-action="cloud-load"]').forEach(b=>b.addEventListener('click',cloudLoad));document.querySelectorAll('[data-action="export"]').forEach(b=>b.addEventListener('click',exportJSON));document.querySelectorAll('[data-action="reset"]').forEach(b=>b.addEventListener('click',()=>{if(confirm('Start a new booking and clear this browser’s saved data?'))newBooking()}));document.querySelectorAll('#module [data-nav]').forEach(button=>button.addEventListener('click',()=>navigateToModule(button.dataset.nav)));document.querySelectorAll('[data-action="add-timeline"]').forEach(b=>b.addEventListener('click',()=>addTimelineItem()));document.querySelectorAll('[data-action="send-message"]').forEach(b=>b.addEventListener('click',addMessage));document.querySelectorAll('[data-action="print-quote"],[data-action="print-contract"],[data-action="print-planner"],[data-action="print-summary"]').forEach(b=>b.addEventListener('click',()=>window.print()))}
+  if(f)state.forms[state.active]=dataFrom(f);save()}));document.querySelectorAll('[data-action="cloud-sync"]').forEach(b=>b.addEventListener('click',cloudSync));document.querySelectorAll('[data-action="cloud-load"]').forEach(b=>b.addEventListener('click',cloudLoad));document.querySelectorAll('[data-action="export"]').forEach(b=>b.addEventListener('click',exportJSON));document.querySelectorAll('[data-action="reset"]').forEach(b=>b.addEventListener('click',()=>{if(confirm('Start a new booking and clear this browser’s saved data?'))newBooking()}));document.querySelectorAll('#module [data-nav]').forEach(button=>button.addEventListener('click',()=>navigateToModule(button.dataset.nav)));document.querySelectorAll('[data-action="add-timeline"]').forEach(b=>b.addEventListener('click',()=>addTimelineItem()));document.querySelectorAll('[data-action="send-message"]').forEach(b=>b.addEventListener('click',addMessage));document.querySelectorAll('[data-action="print-quote"],[data-action="print-contract"],[data-action="print-planner"],[data-action="print-summary"]').forEach(b=>b.addEventListener('click',()=>window.print()))}
 
 function timelineItems(){state.timelineItems=state.timelineItems||[];return state.timelineItems}
 function addTimelineItem(item={time:'',title:'',details:''}){timelineItems().push(item);save(false);renderTimelineRows()}
