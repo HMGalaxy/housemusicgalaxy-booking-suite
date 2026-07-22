@@ -432,8 +432,9 @@ function syncWorkflowFromRecords(){
   const {quote,contract,invoice}=syncFinancialRecordsFromEvent();
   const wf=ensureWorkflow(state);
   const advance=(action,actor)=>{if(allowedActions(state,actor).includes(action))transitionWorkflow(state,action,actor)};
-  if(Object.keys(activeConsultation()).length&&wf.currentState==='BOOKING_REQUEST_RECEIVED')advance('send_event_form','organization');
-  if(Object.keys(activeConsultation()).length&&wf.currentState==='EVENT_FORM_PENDING')advance('submit_event_form','client');
+  const consultationId=['wedding','corporate','private'].find(id=>(state.completed||[]).includes(id));
+  if(consultationId&&wf.currentState==='BOOKING_REQUEST_RECEIVED')advance('send_event_form','organization');
+  if(consultationId&&wf.currentState==='EVENT_FORM_PENDING')advance('submit_event_form','client');
   if(quote&&['Sent','Viewed','Accepted'].includes(quote.status)&&wf.currentState==='QUOTE_PREPARATION')advance('send_quote','organization');
   if(quote?.status==='Accepted'&&wf.currentState==='QUOTE_REVIEW')advance('accept_quote','client');
   if(contract&&['Sent','Viewed','Signed'].includes(contract.status)&&wf.currentState==='CONTRACT_PREPARATION')advance('send_contract_deposit','organization');
@@ -442,26 +443,64 @@ function syncWorkflowFromRecords(){
   const verified=invoice?crmPayments.filter(p=>p.invoiceId===invoice.id&&p.status==='Verified').reduce((a,p)=>a+(Number(p.amountCents)||0),0):0;
   if(wf.currentState==='CONTRACT_DEPOSIT_PENDING'&&depositDue>0&&verified>=depositDue&&!wf.depositPaid)advance('pay_deposit','client');
   const planner=state.forms['wedding-planner']||state.forms['corporate-planner']||state.forms['private-planner']||{};
-  if(wf.currentState==='PLANNING_FORM_PREPARATION'&&Object.keys(planner).length)advance('send_planning_form','organization');
-  if(wf.currentState==='PLANNING_FORM_PENDING'&&Object.keys(planner).length)advance('submit_planning_form','client');
-  if(wf.currentState==='PLANNING_REVIEW'&&Object.keys(state.forms.timeline||{}).length)advance('approve_planning','organization');
+  const plannerId=plannerForBooking();
+  const planningCompleted=Boolean(plannerId&&(state.completed||[]).includes(plannerId));
+  if(wf.currentState==='PLANNING_FORM_PREPARATION'&&planningCompleted)advance('send_planning_form','organization');
+  if(wf.currentState==='PLANNING_FORM_PENDING'&&planningCompleted)advance('submit_planning_form','client');
+  if(wf.currentState==='PLANNING_REVIEW'&&planningCompleted)advance('approve_planning','organization');
   if(wf.currentState==='FINAL_PAYMENT_PENDING'&&invoice&&invoiceBalance(invoice)<=0)advance('record_final_payment','organization');
 }
 function synchronizeEntireWorkflow(){propagateEventCore();syncWorkflowFromRecords();}
-function persistWorkflowConnection({render=false,notify=false}={}){
+
+function persistWorkflowMutation(){
   synchronizeEntireWorkflow();
   state.updated=new Date().toISOString();
   localStorage.setItem(KEY,JSON.stringify(state));
-  upsertLocalEvent(state);
   if(currentUser&&activeBusinessId())queueAutoCloudSync({immediate:false,notify:false});
-  galaxyCueRuntime.bus.emit('workflow:updated',{bookingRef:state.bookingId,state:getWorkflowState(state),eventCore:state.eventCore});
-  if(notify)toast('Workflow updated');
-  if(render)shell();
+  else upsertLocalEvent(state);
 }
-function attachActiveEvent(record={}){
-  if(!state?.bookingId)return record;
+
+function linkRecordToActiveEvent(record={}){
   const core=eventCoreFromState();
-  return {...record,bookingRef:record.bookingRef||state.bookingId,eventRef:record.eventRef||state.bookingId,clientId:record.clientId||core.clientId||'',clientName:record.clientName||core.clientName||'',eventName:record.eventName||`${core.eventType||'Event'}${core.eventDate?' · '+core.eventDate:''}`};
+  return {
+    ...record,
+    bookingRef:record.bookingRef||state.bookingId,
+    eventRef:record.eventRef||state.bookingId,
+    clientId:record.clientId||core.clientId||'',
+    clientName:record.clientName||core.clientName||'',
+    eventName:record.eventName||`${core.eventType||'Event'}${core.eventDate?' · '+core.eventDate:''}`
+  };
+}
+
+function mirrorQuoteRecordToWorkspace(quote){
+  if(!quote||!recordBelongsToActiveEvent(quote))return;
+  const q=state.forms.quote||{};
+  (quote.items||[]).slice(0,5).forEach((item,index)=>{
+    const i=index+1;q[`item${i}Label`]=item.description||'';q[`item${i}Amount`]=((Number(item.quantity)||0)*(Number(item.unitPriceCents)||0)/100).toFixed(2);
+  });
+  q.clientName=quote.clientName||q.clientName||'';
+  q.quoteStatus=quote.status||q.quoteStatus||'Draft';
+  q.depositRate=String(Number(quote.depositPercent)||0);
+  state.forms.quote=q;
+}
+
+function mirrorContractRecordToWorkspace(contract){
+  if(!contract||!recordBelongsToActiveEvent(contract))return;
+  state.forms.contract={...(state.forms.contract||{}),clientName:contract.clientName||'',contractStatus:contract.status||'Draft',terms:contract.terms||'',contractTitle:contract.title||''};
+}
+
+function recordBelongsToActiveEvent(record){
+  return Boolean(record&&(record.bookingRef===state.bookingId||record.eventRef===state.bookingId));
+}
+
+function syncPaymentSummaryToWorkspace(invoice){
+  if(!invoice||!recordBelongsToActiveEvent(invoice))return;
+  const verified=invoicePaid(invoice);
+  const contract=state.forms.contract||{};
+  contract.depositPaid=(verified/100).toFixed(2);
+  contract.depositStatus=verified>0?'Received':'Not received';
+  contract.balanceRemaining=(invoiceBalance(invoice)/100).toFixed(2);
+  state.forms.contract=contract;
 }
 
 function save(show=true){
@@ -1436,7 +1475,7 @@ function renderQuotes(){
   const search=document.querySelector('#quoteSearch');
   if(search)search.addEventListener('input',e=>{quoteSearch=e.target.value;renderQuotes();const n=document.querySelector('#quoteSearch');if(n){n.focus();n.setSelectionRange(n.value.length,n.value.length)}});
   document.querySelectorAll('[data-select-quote]').forEach(b=>b.addEventListener('click',()=>{selectedQuoteId=b.dataset.selectQuote;renderQuotes()}));
-  document.querySelectorAll('[data-action="new-quote"]').forEach(b=>b.addEventListener('click',()=>{selectedQuoteId=null;document.querySelector('.booking-preview-panel').innerHTML=quoteEditor();bindQuoteEditor()}));
+  document.querySelectorAll('[data-action="new-quote"]').forEach(b=>b.addEventListener('click',()=>{selectedQuoteId=null;document.querySelector('.booking-preview-panel').innerHTML=quoteEditor(linkRecordToActiveEvent({id:'',number:makeRecordNumber('Q'),status:'Draft',depositPercent:30,validUntil:'',notes:'',items:[{description:'DJ Service Package',quantity:1,unitPriceCents:0}]}));bindQuoteEditor()}));
   bindQuoteEditor();
   bindDashboardActions();
 }
@@ -1464,7 +1503,7 @@ function quoteEditor(q={id:'',number:makeRecordNumber('Q'),clientName:'',eventNa
   <div class="quote-items" id="quoteItems">${(q.items||[]).map((i,idx)=>quoteItemRow(i,idx)).join('')}</div>
   <button type="button" class="btn compact" data-add-quote-item>＋ Add line item</button>
   <label><span>Notes</span><textarea name="notes" rows="4">${escapeHtml(q.notes||'')}</textarea></label>
-  <input type="hidden" name="id" value="${escapeHtml(q.id)}"><input type="hidden" name="number" value="${escapeHtml(q.number)}">
+  <input type="hidden" name="id" value="${escapeHtml(q.id)}"><input type="hidden" name="number" value="${escapeHtml(q.number)}"><input type="hidden" name="bookingRef" value="${escapeHtml(q.bookingRef||state.bookingId)}"><input type="hidden" name="eventRef" value="${escapeHtml(q.eventRef||state.bookingId)}">
   <button class="btn primary full" type="submit">${q.id?'Save Quote':'Create Quote'}</button></form>`;
 }
 function quoteItemRow(item,idx){
@@ -1473,7 +1512,7 @@ function quoteItemRow(item,idx){
 function bindQuoteEditor(){
   document.querySelectorAll('[data-edit-quote]').forEach(b=>b.addEventListener('click',()=>{const q=crmQuotes.find(x=>x.id===b.dataset.editQuote);document.querySelector('.booking-preview-panel').innerHTML=quoteEditor(q);bindQuoteEditor()}));
   document.querySelectorAll('[data-delete-quote]').forEach(b=>b.addEventListener('click',()=>{if(!confirm('Delete this quote?'))return;crmQuotes=crmQuotes.filter(x=>x.id!==b.dataset.deleteQuote);saveLocalRows(QUOTES_KEY,crmQuotes);selectedQuoteId=null;renderQuotes();toast('Quote deleted')}));
-  document.querySelectorAll('[data-accept-quote]').forEach(b=>b.addEventListener('click',()=>{crmQuotes=crmQuotes.map(q=>q.id===b.dataset.acceptQuote?attachActiveEvent({...q,status:'Accepted',updatedAt:new Date().toISOString()}):q);saveLocalRows(QUOTES_KEY,crmQuotes);persistWorkflowConnection();renderQuotes();toast('Quote accepted · workflow updated')}));
+  document.querySelectorAll('[data-accept-quote]').forEach(b=>b.addEventListener('click',()=>{crmQuotes=crmQuotes.map(q=>q.id===b.dataset.acceptQuote?{...q,status:'Accepted',updatedAt:new Date().toISOString()}:q);saveLocalRows(QUOTES_KEY,crmQuotes);const q=crmQuotes.find(x=>x.id===b.dataset.acceptQuote);mirrorQuoteRecordToWorkspace(q);persistWorkflowMutation();renderQuotes();toast('Quote accepted and workflow updated')}));
   document.querySelectorAll('[data-contract-from-quote]').forEach(b=>b.addEventListener('click',()=>createContractFromQuote(b.dataset.contractFromQuote)));
   document.querySelectorAll('[data-invoice-from-quote]').forEach(b=>b.addEventListener('click',()=>createInvoiceFromQuote(b.dataset.invoiceFromQuote)));
   const form=document.querySelector('#quoteEditor');
@@ -1481,19 +1520,19 @@ function bindQuoteEditor(){
   const add=form.querySelector('[data-add-quote-item]');
   if(add)add.addEventListener('click',()=>{const q=formToQuote(form);q.items.push({description:'',quantity:1,unitPriceCents:0});document.querySelector('.booking-preview-panel').innerHTML=quoteEditor(q);bindQuoteEditor()});
   form.querySelectorAll('[data-remove-quote-item]').forEach(b=>b.addEventListener('click',()=>{const q=formToQuote(form);q.items.splice(Number(b.dataset.removeQuoteItem),1);document.querySelector('.booking-preview-panel').innerHTML=quoteEditor(q);bindQuoteEditor()}));
-  form.addEventListener('submit',e=>{e.preventDefault();let q=attachActiveEvent(formToQuote(form));q.id=q.id||crypto.randomUUID();q.createdAt=q.createdAt||new Date().toISOString();q.updatedAt=new Date().toISOString();crmQuotes=crmQuotes.some(x=>x.id===q.id)?crmQuotes.map(x=>x.id===q.id?q:x):[q,...crmQuotes];saveLocalRows(QUOTES_KEY,crmQuotes);selectedQuoteId=q.id;persistWorkflowConnection();renderQuotes();toast('Quote saved · workflow updated')});
+  form.addEventListener('submit',e=>{e.preventDefault();const q=formToQuote(form);q.id=q.id||crypto.randomUUID();q.createdAt=q.createdAt||new Date().toISOString();q.updatedAt=new Date().toISOString();crmQuotes=crmQuotes.some(x=>x.id===q.id)?crmQuotes.map(x=>x.id===q.id?q:x):[q,...crmQuotes];saveLocalRows(QUOTES_KEY,crmQuotes);mirrorQuoteRecordToWorkspace(q);persistWorkflowMutation();selectedQuoteId=q.id;renderQuotes();toast('Quote saved and connected to event')});
 }
 function formToQuote(form){
   const fd=new FormData(form),items=[];
   form.querySelectorAll('.quote-item-row').forEach((row,idx)=>items.push({description:String(fd.get(`itemDescription_${idx}`)||''),quantity:Number(fd.get(`itemQuantity_${idx}`)||0),unitPriceCents:Math.round(Number(fd.get(`itemPrice_${idx}`)||0)*100)}));
   const id=String(fd.get('id')||'');
   const existing=crmQuotes.find(x=>x.id===id)||{};
-  return {...existing,id,number:String(fd.get('number')||makeRecordNumber('Q')),clientName:String(fd.get('clientName')||''),eventName:String(fd.get('eventName')||''),status:String(fd.get('status')||'Draft'),depositPercent:Number(fd.get('depositPercent')||0),validUntil:String(fd.get('validUntil')||''),notes:String(fd.get('notes')||''),items};
+  return linkRecordToActiveEvent({...existing,id,bookingRef:String(fd.get('bookingRef')||existing.bookingRef||state.bookingId),eventRef:String(fd.get('eventRef')||existing.eventRef||state.bookingId),number:String(fd.get('number')||makeRecordNumber('Q')),clientName:String(fd.get('clientName')||''),eventName:String(fd.get('eventName')||''),status:String(fd.get('status')||'Draft'),depositPercent:Number(fd.get('depositPercent')||0),validUntil:String(fd.get('validUntil')||''),notes:String(fd.get('notes')||''),items});
 }
 function createContractFromQuote(id){
   const q=crmQuotes.find(x=>x.id===id);if(!q)return;
-  const row=attachActiveEvent({id:crypto.randomUUID(),number:makeRecordNumber('C'),quoteId:q.id,bookingRef:q.bookingRef,eventRef:q.eventRef,clientId:q.clientId,clientName:q.clientName,eventName:q.eventName,status:'Draft',title:'DJ Services Agreement',terms:`Services and pricing accepted from ${q.number}.`,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
-  crmContracts.unshift(row);saveLocalRows(CONTRACTS_KEY,crmContracts);selectedContractId=row.id;persistWorkflowConnection();appView='contracts';shell();toast('Contract created from quote · workflow connected');
+  const row=linkRecordToActiveEvent({id:crypto.randomUUID(),number:makeRecordNumber('C'),quoteId:q.id,clientName:q.clientName,eventName:q.eventName,status:'Draft',title:'DJ Services Agreement',terms:`Services and pricing accepted from ${q.number}.`,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
+  crmContracts.unshift(row);saveLocalRows(CONTRACTS_KEY,crmContracts);mirrorContractRecordToWorkspace(row);persistWorkflowMutation();selectedContractId=row.id;appView='contracts';shell();toast('Contract created from quote and linked to event');
 }
 
 
@@ -1511,8 +1550,8 @@ function invoiceStatus(i){
 function createInvoiceFromQuote(id){
   const q=crmQuotes.find(x=>x.id===id);if(!q)return;
   const total=quoteTotal(q);
-  const row=attachActiveEvent({id:crypto.randomUUID(),number:makeRecordNumber('INV'),quoteId:q.id,bookingRef:q.bookingRef,eventRef:q.eventRef,clientId:q.clientId,clientName:q.clientName,eventName:q.eventName,status:'Draft',totalCents:total,dueDate:'',notes:q.notes||'',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
-  crmInvoices.unshift(row);saveLocalRows(INVOICES_KEY,crmInvoices);selectedInvoiceId=row.id;appView='invoices';shell();toast('Invoice created from quote');
+  const row=linkRecordToActiveEvent({id:crypto.randomUUID(),number:makeRecordNumber('INV'),quoteId:q.id,clientName:q.clientName,eventName:q.eventName,status:'Draft',totalCents:total,dueDate:'',notes:q.notes||'',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
+  crmInvoices.unshift(row);saveLocalRows(INVOICES_KEY,crmInvoices);syncPaymentSummaryToWorkspace(row);persistWorkflowMutation();selectedInvoiceId=row.id;appView='invoices';shell();toast('Invoice created from quote and linked to event');
 }
 function renderInvoices(){
   const main=document.querySelector('#main');
@@ -1547,14 +1586,14 @@ function invoiceEditor(i={id:'',number:makeRecordNumber('INV'),clientName:'',eve
   <div class="editor-grid"><label><span>Client name *</span><input name="clientName" required value="${escapeHtml(i.clientName)}"></label><label><span>Event name</span><input name="eventName" value="${escapeHtml(i.eventName)}"></label></div>
   <div class="editor-grid"><label><span>Total amount</span><input name="total" type="number" min="0" step="0.01" value="${(invoiceTotal(i)/100).toFixed(2)}"></label><label><span>Due date</span><input name="dueDate" type="date" value="${escapeHtml(i.dueDate||'')}"></label></div>
   <label><span>Status</span><select name="status">${['Draft','Sent','Void'].map(s=>`<option ${i.status===s?'selected':''}>${s}</option>`).join('')}</select></label>
-  <label><span>Notes</span><textarea name="notes" rows="6">${escapeHtml(i.notes||'')}</textarea></label><input type="hidden" name="id" value="${escapeHtml(i.id)}"><input type="hidden" name="number" value="${escapeHtml(i.number)}"><button class="btn primary full" type="submit">${i.id?'Save Invoice':'Create Invoice'}</button></form>`;
+  <label><span>Notes</span><textarea name="notes" rows="6">${escapeHtml(i.notes||'')}</textarea></label><input type="hidden" name="id" value="${escapeHtml(i.id)}"><input type="hidden" name="number" value="${escapeHtml(i.number)}"><input type="hidden" name="bookingRef" value="${escapeHtml(i.bookingRef||state.bookingId)}"><input type="hidden" name="eventRef" value="${escapeHtml(i.eventRef||state.bookingId)}"><button class="btn primary full" type="submit">${i.id?'Save Invoice':'Create Invoice'}</button></form>`;
 }
 function bindInvoiceEditor(){
   document.querySelectorAll('[data-edit-invoice]').forEach(b=>b.addEventListener('click',()=>{const i=crmInvoices.find(x=>x.id===b.dataset.editInvoice);document.querySelector('.booking-preview-panel').innerHTML=invoiceEditor(i);bindInvoiceEditor()}));
   document.querySelectorAll('[data-delete-invoice]').forEach(b=>b.addEventListener('click',()=>{if(!confirm('Delete this invoice?'))return;crmInvoices=crmInvoices.filter(x=>x.id!==b.dataset.deleteInvoice);crmPayments=crmPayments.filter(p=>p.invoiceId!==b.dataset.deleteInvoice);saveLocalRows(INVOICES_KEY,crmInvoices);saveLocalRows(PAYMENTS_KEY,crmPayments);selectedInvoiceId=null;renderInvoices();toast('Invoice deleted')}));
   document.querySelectorAll('[data-record-payment]').forEach(b=>b.addEventListener('click',()=>openPaymentEditor(b.dataset.recordPayment)));
   const form=document.querySelector('#invoiceEditor');if(!form)return;
-  form.addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(form),id=String(fd.get('id')||''),existing=crmInvoices.find(x=>x.id===id)||{};const row=attachActiveEvent({...existing,id:id||crypto.randomUUID(),number:String(fd.get('number')||makeRecordNumber('INV')),clientName:String(fd.get('clientName')||''),eventName:String(fd.get('eventName')||''),status:String(fd.get('status')||'Draft'),totalCents:Math.round(Number(fd.get('total')||0)*100),dueDate:String(fd.get('dueDate')||''),notes:String(fd.get('notes')||''),createdAt:existing.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()});crmInvoices=id?crmInvoices.map(x=>x.id===id?row:x):[row,...crmInvoices];saveLocalRows(INVOICES_KEY,crmInvoices);selectedInvoiceId=row.id;persistWorkflowConnection();renderInvoices();toast('Invoice saved · workflow updated')});
+  form.addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(form),id=String(fd.get('id')||''),existing=crmInvoices.find(x=>x.id===id)||{};const row=linkRecordToActiveEvent({...existing,id:id||crypto.randomUUID(),bookingRef:String(fd.get('bookingRef')||existing.bookingRef||state.bookingId),eventRef:String(fd.get('eventRef')||existing.eventRef||state.bookingId),number:String(fd.get('number')||makeRecordNumber('INV')),clientName:String(fd.get('clientName')||''),eventName:String(fd.get('eventName')||''),status:String(fd.get('status')||'Draft'),totalCents:Math.round(Number(fd.get('total')||0)*100),dueDate:String(fd.get('dueDate')||''),notes:String(fd.get('notes')||''),createdAt:existing.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()});crmInvoices=id?crmInvoices.map(x=>x.id===id?row:x):[row,...crmInvoices];saveLocalRows(INVOICES_KEY,crmInvoices);syncPaymentSummaryToWorkspace(row);persistWorkflowMutation();selectedInvoiceId=row.id;renderInvoices();toast('Invoice saved and connected to event')});
 }
 function openPaymentEditor(invoiceId=''){
   appView='payments';selectedPaymentId=null;shell();
@@ -1589,10 +1628,10 @@ function paymentEditor(p={id:'',invoiceId:'',amountCents:0,method:'Venmo',status
 }
 function bindPaymentEditor(){
   document.querySelectorAll('[data-edit-payment]').forEach(b=>b.addEventListener('click',()=>{const p=crmPayments.find(x=>x.id===b.dataset.editPayment);document.querySelector('.booking-preview-panel').innerHTML=paymentEditor(p);bindPaymentEditor()}));
-  document.querySelectorAll('[data-verify-payment]').forEach(b=>b.addEventListener('click',()=>{crmPayments=crmPayments.map(p=>p.id===b.dataset.verifyPayment?{...p,status:'Verified',verifiedAt:new Date().toISOString(),updatedAt:new Date().toISOString()}:p);saveLocalRows(PAYMENTS_KEY,crmPayments);persistWorkflowConnection();renderPayments();toast('Payment verified · workflow updated')}));
+  document.querySelectorAll('[data-verify-payment]').forEach(b=>b.addEventListener('click',()=>{crmPayments=crmPayments.map(p=>p.id===b.dataset.verifyPayment?{...p,status:'Verified',verifiedAt:new Date().toISOString(),updatedAt:new Date().toISOString()}:p);saveLocalRows(PAYMENTS_KEY,crmPayments);const p=crmPayments.find(x=>x.id===b.dataset.verifyPayment);const i=crmInvoices.find(x=>x.id===p?.invoiceId);syncPaymentSummaryToWorkspace(i);persistWorkflowMutation();renderPayments();toast('Payment verified and workflow updated')}));
   document.querySelectorAll('[data-delete-payment]').forEach(b=>b.addEventListener('click',()=>{if(!confirm('Delete this payment?'))return;crmPayments=crmPayments.filter(x=>x.id!==b.dataset.deletePayment);saveLocalRows(PAYMENTS_KEY,crmPayments);selectedPaymentId=null;renderPayments();toast('Payment deleted')}));
   const form=document.querySelector('#paymentEditor');if(!form)return;
-  form.addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(form),id=String(fd.get('id')||''),existing=crmPayments.find(x=>x.id===id)||{};const invoice=crmInvoices.find(x=>x.id===String(fd.get('invoiceId')||''));const row={...existing,id:id||crypto.randomUUID(),invoiceId:String(fd.get('invoiceId')||''),bookingRef:existing.bookingRef||invoice?.bookingRef||'',eventRef:existing.eventRef||invoice?.eventRef||'',amountCents:Math.round(Number(fd.get('amount')||0)*100),method:String(fd.get('method')||'Other'),status:String(fd.get('status')||'Submitted'),reference:String(fd.get('reference')||''),note:String(fd.get('note')||''),createdAt:existing.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()};crmPayments=id?crmPayments.map(x=>x.id===id?row:x):[row,...crmPayments];saveLocalRows(PAYMENTS_KEY,crmPayments);selectedPaymentId=row.id;persistWorkflowConnection();renderPayments();toast('Payment saved · workflow updated')});
+  form.addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(form),id=String(fd.get('id')||''),existing=crmPayments.find(x=>x.id===id)||{};const row={...existing,id:id||crypto.randomUUID(),invoiceId:String(fd.get('invoiceId')||''),amountCents:Math.round(Number(fd.get('amount')||0)*100),method:String(fd.get('method')||'Other'),status:String(fd.get('status')||'Submitted'),reference:String(fd.get('reference')||''),note:String(fd.get('note')||''),createdAt:existing.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()};crmPayments=id?crmPayments.map(x=>x.id===id?row:x):[row,...crmPayments];saveLocalRows(PAYMENTS_KEY,crmPayments);const invoice=crmInvoices.find(x=>x.id===row.invoiceId);syncPaymentSummaryToWorkspace(invoice);persistWorkflowMutation();selectedPaymentId=row.id;renderPayments();toast('Payment saved and connected to event')});
 }
 
 function renderContracts(){
@@ -1626,14 +1665,14 @@ function contractEditor(c={id:'',number:makeRecordNumber('C'),clientName:'',even
   <div class="editor-grid"><label><span>Client name *</span><input name="clientName" required value="${escapeHtml(c.clientName)}"></label><label><span>Event name</span><input name="eventName" value="${escapeHtml(c.eventName)}"></label></div>
   <label><span>Status</span><select name="status">${['Draft','Sent','Viewed','Signed','Void'].map(s=>`<option ${c.status===s?'selected':''}>${s}</option>`).join('')}</select></label>
   <label><span>Agreement terms</span><textarea name="terms" rows="12" placeholder="Enter service terms, cancellation policy and payment requirements.">${escapeHtml(c.terms||'')}</textarea></label>
-  <input type="hidden" name="id" value="${escapeHtml(c.id)}"><input type="hidden" name="number" value="${escapeHtml(c.number)}"><button class="btn primary full" type="submit">${c.id?'Save Contract':'Create Contract'}</button></form>`;
+  <input type="hidden" name="id" value="${escapeHtml(c.id)}"><input type="hidden" name="number" value="${escapeHtml(c.number)}"><input type="hidden" name="bookingRef" value="${escapeHtml(c.bookingRef||state.bookingId)}"><input type="hidden" name="eventRef" value="${escapeHtml(c.eventRef||state.bookingId)}"><button class="btn primary full" type="submit">${c.id?'Save Contract':'Create Contract'}</button></form>`;
 }
 function bindContractEditor(){
   document.querySelectorAll('[data-edit-contract]').forEach(b=>b.addEventListener('click',()=>{const c=crmContracts.find(x=>x.id===b.dataset.editContract);document.querySelector('.booking-preview-panel').innerHTML=contractEditor(c);bindContractEditor()}));
   document.querySelectorAll('[data-delete-contract]').forEach(b=>b.addEventListener('click',()=>{if(!confirm('Delete this contract?'))return;crmContracts=crmContracts.filter(x=>x.id!==b.dataset.deleteContract);saveLocalRows(CONTRACTS_KEY,crmContracts);selectedContractId=null;renderContracts();toast('Contract deleted')}));
-  document.querySelectorAll('[data-sign-contract]').forEach(b=>b.addEventListener('click',()=>{crmContracts=crmContracts.map(c=>c.id===b.dataset.signContract?attachActiveEvent({...c,status:'Signed',signedAt:new Date().toISOString(),updatedAt:new Date().toISOString()}):c);saveLocalRows(CONTRACTS_KEY,crmContracts);persistWorkflowConnection();renderContracts();toast('Contract signed · workflow updated')}));
+  document.querySelectorAll('[data-sign-contract]').forEach(b=>b.addEventListener('click',()=>{crmContracts=crmContracts.map(c=>c.id===b.dataset.signContract?{...c,status:'Signed',signedAt:new Date().toISOString(),updatedAt:new Date().toISOString()}:c);saveLocalRows(CONTRACTS_KEY,crmContracts);const c=crmContracts.find(x=>x.id===b.dataset.signContract);mirrorContractRecordToWorkspace(c);persistWorkflowMutation();renderContracts();toast('Contract signed and workflow updated')}));
   const form=document.querySelector('#contractEditor');if(!form)return;
-  form.addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(form),id=String(fd.get('id')||''),existing=crmContracts.find(x=>x.id===id)||{};const row=attachActiveEvent({...existing,id:id||crypto.randomUUID(),number:String(fd.get('number')||makeRecordNumber('C')),clientName:String(fd.get('clientName')||''),eventName:String(fd.get('eventName')||''),status:String(fd.get('status')||'Draft'),title:String(fd.get('title')||'DJ Services Agreement'),terms:String(fd.get('terms')||''),createdAt:existing.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()});crmContracts=id?crmContracts.map(x=>x.id===id?row:x):[row,...crmContracts];saveLocalRows(CONTRACTS_KEY,crmContracts);selectedContractId=row.id;persistWorkflowConnection();renderContracts();toast('Contract saved · workflow updated')});
+  form.addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(form),id=String(fd.get('id')||''),existing=crmContracts.find(x=>x.id===id)||{};const row=linkRecordToActiveEvent({...existing,id:id||crypto.randomUUID(),bookingRef:String(fd.get('bookingRef')||existing.bookingRef||state.bookingId),eventRef:String(fd.get('eventRef')||existing.eventRef||state.bookingId),number:String(fd.get('number')||makeRecordNumber('C')),clientName:String(fd.get('clientName')||''),eventName:String(fd.get('eventName')||''),status:String(fd.get('status')||'Draft'),title:String(fd.get('title')||'DJ Services Agreement'),terms:String(fd.get('terms')||''),createdAt:existing.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()});crmContracts=id?crmContracts.map(x=>x.id===id?row:x):[row,...crmContracts];saveLocalRows(CONTRACTS_KEY,crmContracts);mirrorContractRecordToWorkspace(row);persistWorkflowMutation();selectedContractId=row.id;renderContracts();toast('Contract saved and connected to event')});
 }
 
 
@@ -2410,7 +2449,7 @@ function renderMain(){
     const saved={...(state.forms[state.active]||{}),...(state.forms[`template-${context}`]||{})};fill(form,saved);
     document.querySelectorAll('.dynamic-template-panel input').forEach(input=>{if(Array.isArray(saved[input.name]))input.checked=saved[input.name].includes(input.value);else input.checked=saved[input.name]===true||String(saved[input.name])===String(input.value);input.addEventListener('change',()=>{const templateForm=document.querySelector('.dynamic-template-panel');if(!templateForm)return;state.forms[`template-${context}`]=dataFrom(templateForm);save(false);});});
     form.addEventListener('input',()=>{state.forms[state.active]=dataFrom(form);save(false);if(state.active==='quote')updateQuoteTotals();if(state.active==='contract')updateContractTotals()});
-    form.addEventListener('submit',e=>{e.preventDefault();if(!form.reportValidity())return;state.forms[state.active]=dataFrom(form);if(!state.completed.includes(state.active))state.completed.push(state.active);save();toast(`${modules.find(x=>x.id===state.active)?.label||'Workspace'} completed · workflow updated`);renderMain()});
+    form.addEventListener('submit',e=>{e.preventDefault();if(!form.reportValidity())return;state.forms[state.active]=dataFrom(form);if(!state.completed.includes(state.active))state.completed.push(state.active);save();toast('Workspace completed');renderMain()});
     if(state.active==='quote')updateQuoteTotals();if(state.active==='contract')updateContractTotals();
   }
   bindActions();bindWorkflowActions();bindNav();if(context)bindClientEditor();
@@ -2419,7 +2458,7 @@ function updateQuoteTotals(){const form=document.querySelector('form[data-form="
 function updateContractTotals(){const t=quoteTotals();document.querySelectorAll('[data-contract-total]').forEach(el=>el.textContent=money(t.total));document.querySelectorAll('[data-contract-deposit]').forEach(el=>el.textContent=money(t.deposit))}
 function daysUntil(date){if(!date)return null;const target=new Date(date+'T12:00:00'),today=new Date();today.setHours(0,0,0,0);return Math.ceil((target-today)/86400000)}
 function plannerForBooking(){if(state.forms.wedding&&Object.keys(state.forms.wedding).length)return 'wedding-planner';if(state.forms.corporate&&Object.keys(state.forms.corporate).length)return 'corporate-planner';if(state.forms.private&&Object.keys(state.forms.private).length)return 'private-planner';return null}
-function portal(){const d=activeConsultation(),q=state.forms.quote||{},c=state.forms.contract||{},t=quoteTotals(q),plannerId=plannerForBooking(),eventDate=d.eventDate||q.eventDate||'',days=daysUntil(eventDate),planner=plannerId?state.forms[plannerId]||{}:{},plannerLabel=plannerId?modules.find(x=>x.id===plannerId).label:'Event Planning';return `<div class="card portal-hero"><div><div class="eyebrow">Client Booking Overview</div><h2>${d.primaryClient||q.clientName||'Your Event'}</h2><p class="card-intro">Everything currently saved for booking <strong>${state.bookingId}</strong>.</p></div><div class="countdown"><small>Event Countdown</small><strong>${days===null?'—':days<0?'Past event':days===0?'Today':days+' days'}</strong><span>${eventDate||'Date not set'}</span></div></div><div class="card"><h2>Booking Snapshot</h2><div class="summary-grid"><div class="stat"><small>Event Date</small><strong style="font-size:17px">${eventDate||'—'}</strong></div><div class="stat"><small>Venue</small><strong style="font-size:17px">${d.venueName||q.venueName||'—'}</strong></div><div class="stat"><small>Planner</small><strong style="font-size:17px">${plannerId?(state.completed.includes(plannerId)?'Completed':'In progress'):'Not selected'}</strong></div></div></div><div class="card"><h2>Quote & Payment</h2><div class="summary-grid"><div class="stat"><small>Quote Status</small><strong>${q.quoteStatus||'Not created'}</strong></div><div class="stat"><small>Total</small><strong>${money(t.total)}</strong></div><div class="stat"><small>Deposit Due</small><strong>${money(t.deposit)}</strong></div><div class="stat"><small>Contract Status</small><strong style="font-size:17px">${c.contractStatus||'Draft'}</strong></div><div class="stat"><small>Deposit Received</small><strong>${money(c.depositPaid)}</strong></div><div class="stat"><small>Balance Remaining</small><strong>${money(Math.max(0,t.total-(Number(c.depositPaid)||0)))}</strong></div></div></div><div class="card"><h2>Workflow Progress</h2><div class="workflow-list">${['wedding','corporate','private','quote','contract','wedding-planner','corporate-planner','private-planner'].filter(id=>!id.includes('planner')||id===plannerId).map(id=>{const m=modules.find(x=>x.id===id);return `<button class="workflow-item" data-nav="${id}"><span>${m.label}</span><strong class="${state.completed.includes(id)?'done':''}">${state.completed.includes(id)?'Completed':state.forms[id]?'In progress':'Not started'}</strong></button>`}).join('')}</div><div class="section-actions"><button class="btn" data-action="print-summary">Print Event Summary</button>${plannerId?`<button class="btn primary" data-nav="${plannerId}">Open ${plannerLabel}</button>`:''}</div></div><div class="card"><h2>Event Planning Preview</h2>${plannerId&&Object.keys(planner).length?`<div class="admin-list"><div><span>Must-play songs</span><strong>${planner.mustPlay?'Added':'Not added'}</strong></div><div><span>Do-not-play list</span><strong>${planner.doNotPlay?'Added':'Not added'}</strong></div><div><span>Timeline / run of show</span><strong>${planner.timeline||planner.receptionTimeline||planner.runOfShow?'Added':'Not added'}</strong></div><div><span>Announcements / cues</span><strong>${planner.announcements||planner.ceremonyNotes||planner.avNotes?'Added':'Not added'}</strong></div></div>`:'<p class="card-intro">No event-planning information has been entered yet.</p>'}</div>`}
+function portal(){const d=activeConsultation(),q=state.forms.quote||{},c=state.forms.contract||{},t=quoteTotals(q),plannerId=plannerForBooking(),eventDate=d.eventDate||q.eventDate||'',days=daysUntil(eventDate),planner=plannerId?state.forms[plannerId]||{}:{},plannerLabel=plannerId?modules.find(x=>x.id===plannerId).label:'Event Planning';return `<div class="card portal-hero"><div><div class="eyebrow">Client Booking Overview</div><h2>${d.primaryClient||q.clientName||'Your Event'}</h2><p class="card-intro">Everything currently saved for booking <strong>${state.bookingId}</strong>.</p></div><div class="countdown"><small>Event Countdown</small><strong>${days===null?'—':days<0?'Past event':days===0?'Today':days+' days'}</strong><span>${eventDate||'Date not set'}</span></div></div><div class="card"><h2>Booking Snapshot</h2><div class="summary-grid"><div class="stat"><small>Event Date</small><strong style="font-size:17px">${eventDate||'—'}</strong></div><div class="stat"><small>Venue</small><strong style="font-size:17px">${d.venueName||q.venueName||'—'}</strong></div><div class="stat"><small>Planner</small><strong style="font-size:17px">${plannerId?((state.completed||[]).includes(plannerId)?'Completed':'In progress'):'Not selected'}</strong></div></div></div><div class="card"><h2>Quote & Payment</h2><div class="summary-grid"><div class="stat"><small>Quote Status</small><strong>${q.quoteStatus||'Not created'}</strong></div><div class="stat"><small>Total</small><strong>${money(t.total)}</strong></div><div class="stat"><small>Deposit Due</small><strong>${money(t.deposit)}</strong></div><div class="stat"><small>Contract Status</small><strong style="font-size:17px">${c.contractStatus||'Draft'}</strong></div><div class="stat"><small>Deposit Received</small><strong>${money(c.depositPaid)}</strong></div><div class="stat"><small>Balance Remaining</small><strong>${money(Math.max(0,t.total-(Number(c.depositPaid)||0)))}</strong></div></div></div><div class="card"><h2>Workflow Progress</h2><div class="workflow-list">${['wedding','corporate','private','quote','contract','wedding-planner','corporate-planner','private-planner'].filter(id=>!id.includes('planner')||id===plannerId).map(id=>{const m=modules.find(x=>x.id===id);return `<button class="workflow-item" data-nav="${id}"><span>${m.label}</span><strong class="${(state.completed||[]).includes(id)?'done':''}">${(state.completed||[]).includes(id)?'Completed':state.forms[id]?'In progress':'Not started'}</strong></button>`}).join('')}</div><div class="section-actions"><button class="btn" data-action="print-summary">Print Event Summary</button>${plannerId?`<button class="btn primary" data-nav="${plannerId}">Open ${plannerLabel}</button>`:''}</div></div><div class="card"><h2>Event Planning Preview</h2>${plannerId&&Object.keys(planner).length?`<div class="admin-list"><div><span>Must-play songs</span><strong>${planner.mustPlay?'Added':'Not added'}</strong></div><div><span>Do-not-play list</span><strong>${planner.doNotPlay?'Added':'Not added'}</strong></div><div><span>Timeline / run of show</span><strong>${planner.timeline||planner.receptionTimeline||planner.runOfShow?'Added':'Not added'}</strong></div><div><span>Announcements / cues</span><strong>${planner.announcements||planner.ceremonyNotes||planner.avNotes?'Added':'Not added'}</strong></div></div>`:'<p class="card-intro">No event-planning information has been entered yet.</p>'}</div>`}
 function admin(){const d=activeConsultation(),q=state.forms.quote||{},c=state.forms.contract||{},t=quoteTotals(q);return `<div class="card"><h2>Admin Dashboard</h2><p class="card-intro">Local demonstration dashboard for the active browser.</p><div class="summary-grid"><div class="stat"><small>Client</small><strong>${d.primaryClient||q.clientName||'—'}</strong></div><div class="stat"><small>Quote Total</small><strong>${money(t.total)}</strong></div><div class="stat"><small>Deposit Received</small><strong>${money(c.depositPaid)}</strong></div><div class="stat"><small>Quote Status</small><strong style="font-size:17px">${q.quoteStatus||'Draft'}</strong></div><div class="stat"><small>Contract Status</small><strong style="font-size:17px">${c.contractStatus||'Draft'}</strong></div><div class="stat"><small>Last Updated</small><strong style="font-size:14px">${new Date(state.updated).toLocaleString()}</strong></div></div></div><div class="card"><h2>Event Summary</h2><div class="admin-list"><div><span>Event date</span><strong>${d.eventDate||q.eventDate||'—'}</strong></div><div><span>Venue</span><strong>${d.venueName||q.venueName||'—'}</strong></div><div><span>Deposit status</span><strong>${c.depositStatus||'Not requested'}</strong></div><div><span>Remaining balance</span><strong>${money(Math.max(0,t.total-(Number(c.depositPaid)||0)))}</strong></div></div></div>`}
 function comingSoon(m){return `<div class="card empty"><div class="icon">${m.icon}</div><h2>${m.label}</h2><p class="card-intro">The navigation and data structure are prepared. This module is scheduled for the next build.</p><button class="btn primary" data-nav="wedding">Return to Consultation</button></div>`}
 function updateProgress(form){const n=pct(form);document.querySelector('#progressBar').style.width=n+'%';document.querySelector('#progressText').textContent=n+'%'}

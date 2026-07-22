@@ -1,10 +1,12 @@
 # Galaxy Cue v10.2.0
 
-- Connected the existing Client, Event, Consultation, Quote, Contract, Event Planning/Timeline and Financial forms through one event workflow.
-- Added shared booking/event references to quote, contract, invoice and payment records.
-- Added automatic workflow reconciliation after form saves, quote acceptance, contract signing and payment verification.
-- Kept Event Planning and Timeline in the existing combined planning experience; no new forms were added.
-- Updated the visible Version box, runtime version and cache keys.
+## Connected workflow release
+
+- Connected existing workflow forms and CRM financial records by active event reference.
+- Added bidirectional Quote and Contract synchronization.
+- Added Invoice and verified Payment synchronization to event Financials.
+- Prevented Consultation and Planning from advancing before form completion.
+- Updated visible version box and browser cache version.
 
 # Galaxy Cue v10.1.0
 

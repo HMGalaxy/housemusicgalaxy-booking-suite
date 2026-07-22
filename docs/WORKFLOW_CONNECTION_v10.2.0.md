@@ -1,18 +1,19 @@
-# Galaxy Cue v10.2.0 — Connected Event Workflow
+# Galaxy Cue v10.2.0 — Connected Existing Workflow
 
-This release connects the forms that already existed. It does not add or redesign forms.
+This release does not add or redesign forms. It connects the existing Client, Event, Consultation, Quote, Contract, Event Planning/Timeline, Invoice and Payment surfaces around the active booking reference.
 
-## Connected sequence
+## Implemented
 
-Booking Request → Client/Event → Consultation → Quote → Contract + Deposit → Event Planning (including timeline) → Event Ready → Event Completed → Final Payment → Paid & Completed → Archived.
+- Every new or converted Quote, Contract and Invoice receives the active `bookingRef` and `eventRef`.
+- Quote Library edits mirror back into the existing workspace Quote form.
+- Contract Library edits and signatures mirror back into the existing workspace Contract form.
+- Verified payments update deposit received and remaining balance in the workspace.
+- Workflow reconciliation runs after Quote, Contract, Invoice and Payment mutations.
+- Consultation and Planning advance only after their existing forms are submitted/completed, not on first keystroke.
+- Quote acceptance, contract signature, deposit verification and final payment verification advance the central workflow engine.
+- Existing cards read the latest shared event data after persistence.
+- Version box and cache keys updated to v10.2.0 / 10200.
 
-## Connection rules
+## Existing workflow
 
-- The active booking reference is attached to quote, contract, invoice and payment records.
-- Client and event details propagate from the event/consultation record into Quote, Contract and Event Planning.
-- Saving or accepting a quote reconciles the workflow.
-- Signing a contract reconciles the workflow.
-- Verified payments update deposit and final-payment stages.
-- Submitting the existing Event Planning form advances planning. Timeline remains inside the existing planning experience; no new planning or timeline form was created.
-- Every workspace save persists the unified event core, workflow history and current workflow state.
-- The visible Version box is updated to 10.2.0.
+Booking Request → Consultation → Quote → Contract + Deposit → Event Planning/Timeline → Event Ready → Event Completed → Final Payment → Paid & Completed → Archived
