@@ -1,3 +1,12 @@
+# Galaxy Cue v10.0.3
+
+- Unified client-card rendering across Clients, Consultation, and Planning.
+- Fixed contextual client save/delete behavior.
+- Added full-width component safeguards.
+- Synchronized source and deployment bundle.
+- Added logic audit and regression checklist.
+- Preserved sidebar, workflow, and existing UI.
+
 # Galaxy Cue Changelog
 
 ## v9.1.0 — Business Templates

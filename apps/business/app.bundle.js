@@ -1,7 +1,7 @@
-import {bootstrapGalaxyCue} from '../../shared/js/core/bootstrap.js?v=10002';
-import {ensureWorkflow,getWorkflowState,allowedActions,transitionWorkflow,workflowProgress,ACTION_LABELS,WORKFLOW_STATES} from '../../shared/js/core/workflow.js?v=10002';
+import {bootstrapGalaxyCue} from '../../shared/js/core/bootstrap.js?v=10003';
+import {ensureWorkflow,getWorkflowState,allowedActions,transitionWorkflow,workflowProgress,ACTION_LABELS,WORKFLOW_STATES} from '../../shared/js/core/workflow.js?v=10003';
 const galaxyCueRuntime=bootstrapGalaxyCue();
-import {modules,weddingForm,corporateForm,privateForm,quoteForm,contractForm,weddingPlannerForm,corporatePlannerForm,privatePlannerForm,timelineForm,uploadsView,messagesView} from '../../shared/js/modules.js?v=10002';
+import {modules,weddingForm,corporateForm,privateForm,quoteForm,contractForm,weddingPlannerForm,corporatePlannerForm,privatePlannerForm,timelineForm,uploadsView,messagesView} from '../../shared/js/modules.js?v=10003';
 let supabase=null;
 let getCurrentUser=async()=>null;
 let restoreAuthSession=async()=>({user:null,error:null,handled:false});
@@ -1000,7 +1000,7 @@ async function renderClients(){
     <section class="booking-list-panel"><div class="list-panel-head"><strong>Client Directory</strong><small>${currentUser?'Supabase cloud records':'Saved in this browser'}</small></div>
       <div class="booking-card-list">${filtered.length?filtered.map(client=>clientCard(client,selectedClientId)).join(''):'<div class="empty-state"><strong>No clients found.</strong><br>Create a client or adjust your search.</div>'}</div>
     </section>
-    <aside class="booking-preview-panel">${selected?clientPreview(selected):clientEditor()}</aside>
+    <aside class="booking-preview-panel">${selected?renderUnifiedClientCard(selected):clientEditor()}</aside>
   </div>`;
 
   const search=document.querySelector('#clientSearch');
@@ -1042,6 +1042,15 @@ function clientPreview(client){
   <div class="client-event-timeline"><div class="section-title"><div><small>History</small><h3>Event Timeline</h3></div></div>${stats.events.length?stats.events.slice(0,8).map(event=>`<button data-open-booking="${event.booking_ref}"><span><strong>${escapeHtml(event.event_type||'Event')}</strong><small>${escapeHtml(event.venue_name||'Venue not set')}</small></span><span>${formatEventDate(event.event_date)} →</span></button>`).join(''):'<div class="empty-state compact">No linked events yet.</div>'}</div>
   <button class="text-button danger-text" data-delete-client="${client.id}">Delete client</button></section>`;
 }
+function renderUnifiedClientCard(client){
+  return client?clientPreview(client):'<div class="empty-state compact">No client is linked to this event.</div>';
+}
+function refreshClientSurface(){
+  if(appView==='clients')return renderClients();
+  if(appView==='workspace')return renderMain();
+  return shell();
+}
+
 function clientEditor(c={id:'',firstName:'',lastName:'',name:'',company:'',email:'',phone:'',notes:'',bookingFor:'self',thirdPartyName:'',thirdPartyRole:'',thirdPartyEmail:'',thirdPartyPhone:''}){
   const parts=String(c.name||'').trim().split(/\s+/);
   const firstName=c.firstName||parts.slice(0,-1).join(' ')||parts[0]||'';
@@ -1074,7 +1083,7 @@ function bindClientEditor(){
       crmClients=crmClients.filter(x=>x.id!==id);
       saveClients(crmClients);
     }
-    selectedClientId=null;if(appView==='clients')renderClients();else shell();toast('Client deleted');
+    selectedClientId=null;refreshClientSurface();toast('Client deleted');
   }));
   document.querySelectorAll('[data-client-event]').forEach(b=>b.addEventListener('click',()=>{
     const c=crmClients.find(x=>x.id===b.dataset.clientEvent);openEventModal(c);
@@ -1110,7 +1119,7 @@ function bindClientEditor(){
     if(!id&&duplicate){
       selectedClientId=duplicate.id;
       toast('Existing client found. Opening the current profile instead.');
-      renderClients();
+      refreshClientSurface();
       return;
     }
     if(currentUser&&activeBusinessId()){
@@ -1119,11 +1128,11 @@ function bindClientEditor(){
       if(error){clientCloudStatus='Sync failed';toast(error.message);return}
       selectedClientId=data.id;
       await refreshClientsFromCloud();
-      renderClients();
+      refreshClientSurface();
       toast(id?'Client updated in cloud':'Client created in cloud');
     }else{
       crmClients=id?crmClients.map(x=>x.id===id?row:x):[row,...crmClients];
-      saveClients(crmClients);selectedClientId=row.id;renderClients();
+      saveClients(crmClients);selectedClientId=row.id;refreshClientSurface();
       toast(id?'Client updated locally':'Client created locally');
     }
   });
@@ -2250,7 +2259,7 @@ function workspaceClient(){
 function workspaceClientCard(){
   const client=workspaceClient();
   if(!client)return '';
-  return `<section class="workspace-client-section"><div class="section-title"><div><small>Client</small><h2>Client Profile</h2></div></div><div class="unified-client-card-host">${clientPreview(client)}</div></section>`;
+  return `<section class="workspace-client-section"><div class="section-title"><div><small>Client</small><h2>Client Profile</h2></div></div><div class="unified-client-card-host">${renderUnifiedClientCard(client)}</div></section>`;
 }
 
 function workspaceOverview(){
