@@ -2,9 +2,9 @@ import {createEventBus} from './event-bus.js';
 import {createStore} from './state.js';
 import {storage} from './storage.js';
 
-export const VERSION='9.4.0';
+export const VERSION='10.0.0';
 export const RELEASE='Dynamic Entertainment Templates';
-export const BUILD='2026-07-22T03:45:00Z';
+export const BUILD='2026-07-22T12:00:00Z';
 
 export function bootstrapGalaxyCue(){
   const bus=createEventBus();
