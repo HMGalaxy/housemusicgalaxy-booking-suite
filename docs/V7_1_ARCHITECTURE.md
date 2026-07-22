@@ -1,4 +1,4 @@
-# Galaxy Cue v8.0.0 architecture
+# Galaxy Cue v9.0.0 architecture
 
 ## Application entry points
 

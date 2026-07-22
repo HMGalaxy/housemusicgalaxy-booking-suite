@@ -1,4 +1,4 @@
-# Galaxy Cue OS v8.0.0
+# Galaxy Cue OS v9.0.0
 
 Commercial SaaS experience milestone.
 

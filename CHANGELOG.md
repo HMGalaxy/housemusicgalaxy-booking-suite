@@ -1,26 +1,17 @@
 # Changelog
 
-## v8.0.0
-- Redesigned Business OS dashboard.
-- Added workflow action cards, notifications, activity feed, and premium client profiles.
-- Added verified version badges to all three apps.
-- Updated branding and responsive UI.
+## v9.0.0
 
-# Changelog
+### Business OS milestones v8.1–v9.0
 
-## v8.0.0
+- Restored Nunito Sans as the consistent Galaxy Cue application font.
+- Removed the Client Portal button from Business OS navigation.
+- Reorganized the sidebar into Command, Work and System groups.
+- Retained the redesigned Dashboard command center, KPI cards, workflow cards, notifications, activity feed and client profiles.
+- Added a consolidated Documents hub.
+- Added a consolidated Financials hub for Quotes, Invoices and Payments.
+- Added an Automation Center foundation with event-workflow templates.
+- Improved responsive behavior, event workspace tabs, spacing and visual consistency.
+- Updated visible and runtime version checks to v9.0.0 across all three applications.
 
-- Established stable Admin, Business and Client application entry points.
-- Replaced base-sensitive static module paths with application-local runtime loaders.
-- Corrected Client App navigation and magic-link return paths.
-- Added centralized public runtime configuration.
-- Preserved Admin access RPC and existing Supabase database compatibility.
-- Added compatibility redirects for legacy root URLs.
-- Updated visible and runtime version identifiers to v8.0.0.
-
-## v8.0.0 — Shared Brand Assets and Version Alignment
-
-- Fixed the Galaxy Cue logo and GC mark in Admin OS, Business OS, and Client App.
-- Corrected asset URLs for the nested GitHub Pages application routes.
-- Updated the Business OS runtime and visible version indicator to v8.0.0.
-- Aligned the centralized app configuration and branding metadata with v8.0.0.
+No new database migration is required for this interface-focused release.

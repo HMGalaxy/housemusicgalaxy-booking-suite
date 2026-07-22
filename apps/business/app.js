@@ -608,20 +608,24 @@ function shell(){document.querySelector('#app').innerHTML=`<div class="crm-shell
       <button class="mobile-menu-close" type="button" data-action="close-mobile-menu" aria-label="Close navigation">×</button>
     </div>
     <div class="workspace-label">Business</div>
+    <div class="nav-group-label">Command</div>
     ${[
       ['dashboard','⌂','Dashboard'],
       ['bookings','▣','Events'],
-      ['quotes','▥','Quotes'],
-      ['contracts','▤','Contracts'],
-      ['invoices','▦','Invoices'],
-      ['payments','$','Payments'],
       ['clients','♙','Clients'],
-      ['calendar','□','Calendar'],
-      ['music','♫','Music Planner'],
-      ['files','▱','Files'],
+      ['calendar','□','Calendar']
+    ].map(([id,icon,label])=>`<button class="crm-nav ${effectiveNavigationView()===id?'active':''}" data-view="${id}" ${effectiveNavigationView()===id?'aria-current="page"':''}><span>${icon}</span>${label}</button>`).join('')}
+    <div class="nav-group-label">Work</div>
+    ${[
       ['messages','○','Messages'],
-      ['client-portal','◇','Client Portal'],
-      ['analytics','⌁','Analytics'],
+      ['documents','▱','Documents'],
+      ['music','♫','Music Planner'],
+      ['financials','$','Financials'],
+      ['automation','⌁','Automation']
+    ].map(([id,icon,label])=>`<button class="crm-nav ${effectiveNavigationView()===id?'active':''}" data-view="${id}" ${effectiveNavigationView()===id?'aria-current="page"':''}><span>${icon}</span>${label}</button>`).join('')}
+    <div class="nav-group-label">System</div>
+    ${[
+      ['analytics','◫','Analytics'],
       ['settings','⚙','Settings']
     ].map(([id,icon,label])=>`<button class="crm-nav ${effectiveNavigationView()===id?'active':''}" data-view="${id}" ${effectiveNavigationView()===id?'aria-current="page"':''}><span>${icon}</span>${label}</button>`).join('')}
     <div class="sidebar-footer"><small>Current event</small><strong>${state.bookingId}</strong></div>
@@ -654,6 +658,9 @@ function renderAppView(){
   else if(appView==='invoices')renderInvoices();
   else if(appView==='payments')renderPayments();
   else if(appView==='clients')renderClients();
+  else if(appView==='documents')renderDocumentsHub();
+  else if(appView==='financials')renderFinancialHub();
+  else if(appView==='automation')renderAutomationCenter();
   else if(appView==='client-portal')renderClientPortal();
   else if(appView==='analytics')renderSectionView('Analytics','Understand bookings, revenue and business performance.','⌁');
   else if(appView==='settings')renderSettings();
@@ -663,6 +670,44 @@ function renderAppView(){
   }
   else renderMain();
 }
+
+function renderDocumentsHub(){
+  const main=document.querySelector('#main');
+  const documents=[
+    {title:'Quotes',description:'Build, send and track event proposals.',view:'quotes',icon:'▥'},
+    {title:'Contracts',description:'Manage agreements and signature status.',view:'contracts',icon:'▤'},
+    {title:'Event Files',description:'Keep playlists, riders and uploads organized.',view:'files',icon:'▱'}
+  ];
+  main.innerHTML=`<section class="dash-hero compact-hero"><div><div class="eyebrow">Business OS · Documents</div><h1>Documents</h1><p>Everything attached to an event, organized in one workspace.</p></div>${versionCheckBox('Business OS verified')}</section>
+  <section class="v9-hub-grid">${documents.map(item=>`<button class="v9-hub-card" data-view="${item.view}"><span>${item.icon}</span><div><h2>${item.title}</h2><p>${item.description}</p></div><em>Open →</em></button>`).join('')}</section>`;
+  document.querySelectorAll('.v9-hub-card').forEach(button=>button.addEventListener('click',()=>navigateToView(button.dataset.view)));
+}
+
+function renderFinancialHub(){
+  const main=document.querySelector('#main');
+  const quoteTotal=cloudBookings.filter(e=>String(e.status||'').toLowerCase().includes('quote')).length;
+  const confirmed=cloudBookings.filter(e=>['confirmed','booked','event ready'].includes(String(e.status||'').toLowerCase())).length;
+  main.innerHTML=`<section class="dash-hero compact-hero"><div><div class="eyebrow">Business OS · Financials</div><h1>Financials</h1><p>Quotes, invoices and payments in one clean control center.</p></div>${versionCheckBox('Business OS verified')}</section>
+  <section class="v9-finance-summary"><article><small>Quotes in progress</small><strong>${quoteTotal}</strong><span>Awaiting review or approval</span></article><article><small>Confirmed events</small><strong>${confirmed}</strong><span>Active revenue opportunities</span></article><article><small>Workspace</small><strong>${currentUser?'Cloud':'Local'}</strong><span>${currentUser?'Synced with Supabase':'Sign in to sync records'}</span></article></section>
+  <section class="v9-hub-grid"><button class="v9-hub-card" data-view="quotes"><span>▥</span><div><h2>Quotes</h2><p>Create proposals and monitor approvals.</p></div><em>Open →</em></button><button class="v9-hub-card" data-view="invoices"><span>▦</span><div><h2>Invoices</h2><p>Prepare invoices linked to each event.</p></div><em>Open →</em></button><button class="v9-hub-card" data-view="payments"><span>$</span><div><h2>Payments</h2><p>Track deposits, balances and payment status.</p></div><em>Open →</em></button></section>`;
+  document.querySelectorAll('.v9-hub-card').forEach(button=>button.addEventListener('click',()=>navigateToView(button.dataset.view)));
+}
+
+function renderAutomationCenter(){
+  const main=document.querySelector('#main');
+  const rules=[
+    ['New inquiry acknowledgement','Send an immediate confirmation when a booking request arrives.','Booking Request','Ready'],
+    ['Quote follow-up','Create a follow-up task when a quote remains unanswered.','Quote Sent','Ready'],
+    ['Planning reminder','Remind the team when event details are incomplete.','Planning','Ready'],
+    ['Final event check','Create a readiness review before the event date.','Event Ready','Ready']
+  ];
+  main.innerHTML=`<section class="dash-hero compact-hero"><div><div class="eyebrow">Business OS · Automation</div><h1>Automation Center</h1><p>Standardize follow-ups and protect every step of the event workflow.</p></div><button class="btn primary" data-new-automation>＋ New Rule</button></section>
+  <section class="v9-automation-overview"><div><strong>${rules.length}</strong><span>Workflow templates</span></div><div><strong>5</strong><span>Core event stages</span></div><div><strong>Manual</strong><span>Execution mode</span></div></section>
+  <section class="v9-rule-list">${rules.map((r,i)=>`<article><div class="v9-rule-icon">${String(i+1).padStart(2,'0')}</div><div><h2>${r[0]}</h2><p>${r[1]}</p><small>Trigger: ${r[2]}</small></div><span class="status-chip gold">${r[3]}</span><button class="btn compact" data-rule-index="${i}">Configure</button></article>`).join('')}</section>
+  <div class="v9-foundation-note"><strong>Automation foundation</strong><p>This release establishes the Business OS automation interface and workflow templates. Delivery channels can be connected as the messaging and billing services are activated.</p></div>`;
+  document.querySelectorAll('[data-rule-index],[data-new-automation]').forEach(button=>button.addEventListener('click',()=>toast('Automation configuration is ready for the next service connection.')));
+}
+
 async function refreshCloudBookings(){
   if(!currentUser){
     cloudBookings=loadLocalEvents();
