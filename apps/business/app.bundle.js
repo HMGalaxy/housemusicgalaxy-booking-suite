@@ -1,7 +1,7 @@
-import {bootstrapGalaxyCue} from '../../shared/js/core/bootstrap.js?v=10001';
-import {ensureWorkflow,getWorkflowState,allowedActions,transitionWorkflow,workflowProgress,ACTION_LABELS,WORKFLOW_STATES} from '../../shared/js/core/workflow.js?v=10001';
+import {bootstrapGalaxyCue} from '../../shared/js/core/bootstrap.js?v=10002';
+import {ensureWorkflow,getWorkflowState,allowedActions,transitionWorkflow,workflowProgress,ACTION_LABELS,WORKFLOW_STATES} from '../../shared/js/core/workflow.js?v=10002';
 const galaxyCueRuntime=bootstrapGalaxyCue();
-import {modules,weddingForm,corporateForm,privateForm,quoteForm,contractForm,weddingPlannerForm,corporatePlannerForm,privatePlannerForm,timelineForm,uploadsView,messagesView} from '../../shared/js/modules.js?v=10001';
+import {modules,weddingForm,corporateForm,privateForm,quoteForm,contractForm,weddingPlannerForm,corporatePlannerForm,privatePlannerForm,timelineForm,uploadsView,messagesView} from '../../shared/js/modules.js?v=10002';
 let supabase=null;
 let getCurrentUser=async()=>null;
 let restoreAuthSession=async()=>({user:null,error:null,handled:false});
@@ -170,14 +170,23 @@ let crmClients=loadClients();
 
 function activeBusinessId(){return activeBusiness?.business_id||activeBusiness?.businesses?.id||null}
 function normalizeCloudClient(row){
+  const firstName=row.first_name||String(row.name||'').trim().split(/\s+/).slice(0,-1).join(' ');
+  const lastName=row.last_name||String(row.name||'').trim().split(/\s+/).slice(-1).join(' ');
   return {
     id:row.id,
-    name:row.name||'',
+    firstName,
+    lastName,
+    name:[firstName,lastName].filter(Boolean).join(' ')||row.name||'',
     company:row.company||'',
     email:row.email||'',
     phone:row.phone||'',
     address:row.address||'',
     notes:row.notes||'',
+    bookingFor:row.booking_for||'self',
+    thirdPartyName:row.third_party_name||'',
+    thirdPartyRole:row.third_party_role||'',
+    thirdPartyEmail:row.third_party_email||'',
+    thirdPartyPhone:row.third_party_phone||'',
     createdAt:row.created_at||new Date().toISOString(),
     updatedAt:row.updated_at||new Date().toISOString(),
     cloud:true
@@ -1023,26 +1032,34 @@ function clientPreview(client){
   const stats=clientTimelineStats(client);
   const initials=(client.name||client.company||'?').split(/\s+/).map(x=>x[0]).join('').slice(0,2).toUpperCase();
   const next=stats.next;
-  return `<section class="v8-client-profile"><header><div class="v8-client-avatar">${escapeHtml(initials)}</div><div><div class="preview-eyebrow">Client Profile</div><h2>${escapeHtml(client.name||client.company||'Unnamed Client')}</h2><p>${escapeHtml(client.company||'Private client')}</p></div><span class="v8-profile-status">Active</span></header>
+  const thirdParty=client.bookingFor==='third-party';
+  return `<section class="v8-client-profile unified-client-card" data-client-card-id="${client.id}"><header><div class="v8-client-avatar">${escapeHtml(initials)}</div><div><div class="preview-eyebrow">Client Profile</div><h2>${escapeHtml(client.name||client.company||'Unnamed Client')}</h2><p>${escapeHtml(client.company||'Private client')}</p></div><span class="v8-profile-status">Active</span></header>
   <div class="v8-profile-actions"><button class="btn primary" data-client-event="${client.id}">＋ New Event</button><button class="btn" data-edit-client="${client.id}">Edit Profile</button></div>
   <div class="v8-profile-kpis"><div><small>Total Events</small><strong>${stats.events.length}</strong></div><div><small>Next Event</small><strong>${next?shortMonth(next.event_date)+' '+shortDay(next.event_date):'—'}</strong></div><div><small>Last Event</small><strong>${stats.last?shortMonth(stats.last.event_date)+' '+shortDay(stats.last.event_date):'—'}</strong></div></div>
   <div class="preview-grid v8-contact-grid"><div><small>Email</small><strong>${escapeHtml(client.email||'Not set')}</strong></div><div><small>Phone</small><strong>${escapeHtml(client.phone||'Not set')}</strong></div><div><small>Updated</small><strong>${new Date(client.updatedAt||client.createdAt).toLocaleDateString()}</strong></div><div><small>Next Venue</small><strong>${escapeHtml(next?.venue_name||'None scheduled')}</strong></div></div>
+  <div class="client-booking-relationship"><div><small>Booking relationship</small><strong>${thirdParty?'Booking for a third party':'Booking for themselves'}</strong></div>${thirdParty?`<div class="third-party-summary"><span><small>Event contact</small><strong>${escapeHtml(client.thirdPartyName||'Not entered')}</strong></span><span><small>Role</small><strong>${escapeHtml(client.thirdPartyRole||'Not entered')}</strong></span><span><small>Email</small><strong>${escapeHtml(client.thirdPartyEmail||'Not entered')}</strong></span><span><small>Phone</small><strong>${escapeHtml(client.thirdPartyPhone||'Not entered')}</strong></span></div>`:''}</div>
   ${client.notes?`<div class="client-notes"><small>Internal Notes</small><p>${escapeHtml(client.notes)}</p></div>`:''}
   <div class="client-event-timeline"><div class="section-title"><div><small>History</small><h3>Event Timeline</h3></div></div>${stats.events.length?stats.events.slice(0,8).map(event=>`<button data-open-booking="${event.booking_ref}"><span><strong>${escapeHtml(event.event_type||'Event')}</strong><small>${escapeHtml(event.venue_name||'Venue not set')}</small></span><span>${formatEventDate(event.event_date)} →</span></button>`).join(''):'<div class="empty-state compact">No linked events yet.</div>'}</div>
   <button class="text-button danger-text" data-delete-client="${client.id}">Delete client</button></section>`;
 }
-function clientEditor(c={id:'',name:'',company:'',email:'',phone:'',notes:''}){
+function clientEditor(c={id:'',firstName:'',lastName:'',name:'',company:'',email:'',phone:'',notes:'',bookingFor:'self',thirdPartyName:'',thirdPartyRole:'',thirdPartyEmail:'',thirdPartyPhone:''}){
+  const parts=String(c.name||'').trim().split(/\s+/);
+  const firstName=c.firstName||parts.slice(0,-1).join(' ')||parts[0]||'';
+  const lastName=c.lastName||((parts.length>1&&parts.slice(-1)[0])||'');
+  const thirdParty=c.bookingFor==='third-party';
   return `<form id="clientEditor" class="client-editor"><div class="preview-eyebrow">${c.id?'Edit Client':'New Client'}</div><h2>${c.id?'Update profile':'Create client'}</h2>
-  <label><span>Client name *</span><input name="name" required value="${escapeHtml(c.name)}" placeholder="Full name"></label>
+  <div class="editor-grid"><label><span>First name *</span><input name="firstName" required value="${escapeHtml(firstName)}"></label><label><span>Last name *</span><input name="lastName" required value="${escapeHtml(lastName)}"></label></div>
   <label><span>Company / organization</span><input name="company" value="${escapeHtml(c.company)}" placeholder="Optional"></label>
   <div class="editor-grid"><label><span>Email</span><input type="email" name="email" value="${escapeHtml(c.email)}"></label><label><span>Phone</span><input name="phone" value="${escapeHtml(c.phone)}"></label></div>
+  <fieldset class="booking-for-fieldset"><legend>Who is this client booking for?</legend><label class="choice-row"><input type="radio" name="bookingFor" value="self" ${!thirdParty?'checked':''}><span>Booking for themselves</span></label><label class="choice-row"><input type="radio" name="bookingFor" value="third-party" ${thirdParty?'checked':''}><span>Booking for someone else / third party</span></label></fieldset>
+  <div class="third-party-fields" ${thirdParty?'':'hidden'}><div class="section-title compact"><div><small>Third-party booking</small><h3>Event Contact</h3></div></div><div class="editor-grid"><label><span>Full name</span><input name="thirdPartyName" value="${escapeHtml(c.thirdPartyName||'')}"></label><label><span>Role / relationship</span><input name="thirdPartyRole" value="${escapeHtml(c.thirdPartyRole||'')}" placeholder="Bride, company contact, honoree…"></label></div><div class="editor-grid"><label><span>Email</span><input type="email" name="thirdPartyEmail" value="${escapeHtml(c.thirdPartyEmail||'')}"></label><label><span>Phone</span><input name="thirdPartyPhone" value="${escapeHtml(c.thirdPartyPhone||'')}"></label></div></div>
   <label><span>Internal notes</span><textarea name="notes" rows="5">${escapeHtml(c.notes)}</textarea></label>
   <input type="hidden" name="id" value="${escapeHtml(c.id)}"><button class="btn primary full" type="submit">${c.id?'Save Changes':'Create Client'}</button></form>`;
 }
 function bindClientEditor(){
   document.querySelectorAll('[data-edit-client]').forEach(b=>b.addEventListener('click',()=>{
     const c=crmClients.find(x=>x.id===b.dataset.editClient);
-    document.querySelector('.booking-preview-panel').innerHTML=clientEditor(c);
+    const host=b.closest('.unified-client-card-host')||document.querySelector('.booking-preview-panel');if(host)host.innerHTML=clientEditor(c);
     bindClientEditor();
   }));
   document.querySelectorAll('[data-delete-client]').forEach(b=>b.addEventListener('click',async()=>{
@@ -1057,22 +1074,34 @@ function bindClientEditor(){
       crmClients=crmClients.filter(x=>x.id!==id);
       saveClients(crmClients);
     }
-    selectedClientId=null;renderClients();toast('Client deleted');
+    selectedClientId=null;if(appView==='clients')renderClients();else shell();toast('Client deleted');
   }));
   document.querySelectorAll('[data-client-event]').forEach(b=>b.addEventListener('click',()=>{
     const c=crmClients.find(x=>x.id===b.dataset.clientEvent);openEventModal(c);
   }));
   const form=document.querySelector('#clientEditor');
+  if(form){
+    const syncThirdParty=()=>{const block=form.querySelector('.third-party-fields');if(block)block.hidden=form.elements.bookingFor.value!=='third-party';};
+    form.querySelectorAll('input[name="bookingFor"]').forEach(input=>input.addEventListener('change',syncThirdParty));
+    syncThirdParty();
+  }
   if(form)form.addEventListener('submit',async e=>{
     e.preventDefault();
     const fd=new FormData(form),id=String(fd.get('id')||'');
     const existing=crmClients.find(x=>x.id===id)||{};
     const row={
       id:id||crypto.randomUUID(),
-      name:String(fd.get('name')||'').trim(),
+      firstName:String(fd.get('firstName')||'').trim(),
+      lastName:String(fd.get('lastName')||'').trim(),
+      name:[String(fd.get('firstName')||'').trim(),String(fd.get('lastName')||'').trim()].filter(Boolean).join(' '),
       company:String(fd.get('company')||'').trim(),
       email:String(fd.get('email')||'').trim(),
       phone:String(fd.get('phone')||'').trim(),
+      bookingFor:String(fd.get('bookingFor')||'self'),
+      thirdPartyName:String(fd.get('thirdPartyName')||'').trim(),
+      thirdPartyRole:String(fd.get('thirdPartyRole')||'').trim(),
+      thirdPartyEmail:String(fd.get('thirdPartyEmail')||'').trim(),
+      thirdPartyPhone:String(fd.get('thirdPartyPhone')||'').trim(),
       notes:String(fd.get('notes')||'').trim(),
       createdAt:existing.createdAt||new Date().toISOString(),
       updatedAt:new Date().toISOString()
@@ -2212,6 +2241,18 @@ function bindDashboardActions(){
   document.querySelectorAll('[data-action="import-local-cloud"]').forEach(b=>b.addEventListener('click',migrateLocalClientsAndEvent));
 }
 
+function workspaceClient(){
+  const event=(cloudBookings||[]).find(row=>row.booking_ref===state.bookingId)||loadLocalEvents().find(row=>row.booking_ref===state.bookingId);
+  if(event?.client_id){const byId=crmClients.find(client=>client.id===event.client_id);if(byId)return byId;}
+  const d=activeConsultation(),q=state.forms.quote||{};
+  return findMatchingClient({email:d.email||q.clientEmail||event?.client_email||'',name:d.primaryClient||d.company||q.clientName||event?.client_name||''});
+}
+function workspaceClientCard(){
+  const client=workspaceClient();
+  if(!client)return '';
+  return `<section class="workspace-client-section"><div class="section-title"><div><small>Client</small><h2>Client Profile</h2></div></div><div class="unified-client-card-host">${clientPreview(client)}</div></section>`;
+}
+
 function workspaceOverview(){
   const d=activeConsultation(),q=state.forms.quote||{},c=state.forms.contract||{},eventDate=d.eventDate||q.eventDate||'';
   const complete=state.completed||[];
@@ -2231,7 +2272,8 @@ function renderMain(){
   main.dataset.workspaceModule=state.active;
   const overview=workspaceOverview();
   const context=['wedding','corporate','private'].includes(state.active)?'consultation':['wedding-planner','corporate-planner','private-planner'].includes(state.active)?'planning':null;
-  main.innerHTML=`<section class="hero workspace-hero"><div><button class="text-button back-dashboard" data-view="${context==='planning'?'planning':context==='consultation'?'consultations':'dashboard'}">← Back</button><div class="eyebrow">Current Event · ${state.bookingId}</div><h1>${m.label}</h1><p>${m.description} ${currentUser?'Changes save and sync automatically while you are signed in.':'Changes save automatically in this browser.'}</p></div></section>${overview}<div class="booking-strip"><div class="ref"><small>Event Reference</small><br><strong>${state.bookingId}</strong></div><div class="actions"><span class="autosave-chip">● Saved locally</span><button class="btn" data-action="save">Save Now</button><button class="btn primary" data-action="cloud-sync">${currentUser?'Sync Now':'Sign in to Sync'}</button></div></div><div id="module"></div><div class="footer-note">Galaxy Cue · Entertainment Company Operating System</div>`;
+  const unifiedClient=context?workspaceClientCard():'';
+  main.innerHTML=`<section class="hero workspace-hero"><div><button class="text-button back-dashboard" data-view="${context==='planning'?'planning':context==='consultation'?'consultations':'dashboard'}">← Back</button><div class="eyebrow">Current Event · ${state.bookingId}</div><h1>${m.label}</h1><p>${m.description} ${currentUser?'Changes save and sync automatically while you are signed in.':'Changes save automatically in this browser.'}</p></div></section>${overview}${unifiedClient}<div class="booking-strip"><div class="ref"><small>Event Reference</small><br><strong>${state.bookingId}</strong></div><div class="actions"><span class="autosave-chip">● Saved locally</span><button class="btn" data-action="save">Save Now</button><button class="btn primary" data-action="cloud-sync">${currentUser?'Sync Now':'Sign in to Sync'}</button></div></div><div id="module"></div><div class="footer-note">Galaxy Cue · Entertainment Company Operating System</div>`;
   const host=document.querySelector('#module'),source=activeConsultation();
   host.className=`module-host module-${state.active}`;host.dataset.module=state.active;
   if(state.active==='wedding')host.innerHTML=weddingForm();
@@ -2257,7 +2299,7 @@ function renderMain(){
     form.addEventListener('submit',e=>{e.preventDefault();if(!form.reportValidity())return;state.forms[state.active]=dataFrom(form);if(!state.completed.includes(state.active))state.completed.push(state.active);save();toast('Workspace completed');renderMain()});
     if(state.active==='quote')updateQuoteTotals();if(state.active==='contract')updateContractTotals();
   }
-  bindActions();bindWorkflowActions();bindNav();
+  bindActions();bindWorkflowActions();bindNav();if(context)bindClientEditor();
 }
 function updateQuoteTotals(){const form=document.querySelector('form[data-form="quote"]');if(!form)return;const q=dataFrom(form),t=quoteTotals(q);[['subtotalValue',t.subtotal],['discountValue',-t.discount],['taxValue',t.tax],['totalValue',t.total],['depositValue',t.deposit],['balanceValue',t.balance]].forEach(([id,v])=>{const el=document.getElementById(id);if(el)el.textContent=money(v)})}
 function updateContractTotals(){const t=quoteTotals();document.querySelectorAll('[data-contract-total]').forEach(el=>el.textContent=money(t.total));document.querySelectorAll('[data-contract-deposit]').forEach(el=>el.textContent=money(t.deposit))}
