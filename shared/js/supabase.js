@@ -253,14 +253,27 @@ export async function saveCloudClient(client, businessId) {
   const payload = {
     business_id: businessId,
     name: client.name || 'Unnamed Client',
+    first_name: client.firstName || null,
+    last_name: client.lastName || null,
     company: client.company || null,
     email: client.email || null,
     phone: client.phone || null,
     address: client.address || null,
-    notes: client.notes || null
+    notes: client.notes || null,
+    booking_for: client.bookingFor || 'self',
+    third_party_name: client.thirdPartyName || null,
+    third_party_role: client.thirdPartyRole || null,
+    third_party_email: client.thirdPartyEmail || null,
+    third_party_phone: client.thirdPartyPhone || null
   };
   if (client.id && /^[0-9a-f-]{36}$/i.test(client.id)) payload.id = client.id;
-  return supabase.from('clients').upsert(payload).select().single();
+  let result = await supabase.from('clients').upsert(payload).select().single();
+  if (result.error && /column|schema cache/i.test(result.error.message || '')) {
+    const legacy = {business_id:businessId,name:payload.name,company:payload.company,email:payload.email,phone:payload.phone,address:payload.address,notes:payload.notes};
+    if (payload.id) legacy.id=payload.id;
+    result = await supabase.from('clients').upsert(legacy).select().single();
+  }
+  return result;
 }
 
 export async function removeCloudClient(id, businessId) {
