@@ -1323,3 +1323,8 @@ button,input,select,textarea,option,optgroup{
 
 /* alpha.10 event document review */
 .business-document-copy{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:18px 0}.business-document-copy .lead-review-grid{display:block}.business-document-copy .lead-review-grid>div{min-height:78px}.btn:disabled{opacity:.5;cursor:not-allowed}@media(max-width:700px){.business-document-copy{grid-template-columns:1fr}}@media print{body>*:not(.modal){display:none!important}.modal{position:static!important;background:#fff!important}.modal-panel{max-height:none!important;box-shadow:none!important;color:#111!important;background:#fff!important}.modal-close,.lead-actions{display:none!important}}
+
+/* v10.0.3 unified component safeguards */
+.unified-client-card-host,.unified-client-card,.workspace-client-section{width:100%;max-width:none;box-sizing:border-box}
+.unified-client-card-host>.client-editor{width:100%;box-sizing:border-box}
+.workspace-client-section .v8-client-profile{margin:0}
