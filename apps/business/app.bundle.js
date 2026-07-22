@@ -1,7 +1,7 @@
-import {bootstrapGalaxyCue} from '../../shared/js/core/bootstrap.js?v=10004';
-import {ensureWorkflow,getWorkflowState,allowedActions,transitionWorkflow,workflowProgress,ACTION_LABELS,WORKFLOW_STATES} from '../../shared/js/core/workflow.js?v=10004';
+import {bootstrapGalaxyCue} from '../../shared/js/core/bootstrap.js?v=10100';
+import {ensureWorkflow,getWorkflowState,allowedActions,transitionWorkflow,workflowProgress,ACTION_LABELS,WORKFLOW_STATES} from '../../shared/js/core/workflow.js?v=10100';
 const galaxyCueRuntime=bootstrapGalaxyCue();
-import {modules,weddingForm,corporateForm,privateForm,quoteForm,contractForm,weddingPlannerForm,corporatePlannerForm,privatePlannerForm,timelineForm,uploadsView,messagesView} from '../../shared/js/modules.js?v=10004';
+import {modules,weddingForm,corporateForm,privateForm,quoteForm,contractForm,weddingPlannerForm,corporatePlannerForm,privatePlannerForm,timelineForm,uploadsView,messagesView} from '../../shared/js/modules.js?v=10100';
 let supabase=null;
 let getCurrentUser=async()=>null;
 let restoreAuthSession=async()=>({user:null,error:null,handled:false});
@@ -359,7 +359,98 @@ async function runAutoCloudSync({notify=false}={}){
   }
 }
 
+
+
+// ---- Unified event workflow bridge (v10.1.0) ----
+function eventCoreFromState(){
+  state.eventCore=state.eventCore||{};
+  const d=activeConsultation();
+  const linked=findClientForState?.()||null;
+  const source=state.forms?.[state.active]||{};
+  const pick=(...values)=>values.find(v=>v!==undefined&&v!==null&&String(v).trim()!=='')||'';
+  const core={
+    bookingRef:state.bookingId,
+    clientId:linked?.id||state.eventCore.clientId||'',
+    clientName:pick(source.primaryClient,source.clientName,d.primaryClient,d.company,state.eventCore.clientName,linked?.name,linked?.company),
+    clientEmail:pick(source.email,source.clientEmail,d.email,state.eventCore.clientEmail,linked?.email),
+    clientPhone:pick(source.phone,d.phone,state.eventCore.clientPhone,linked?.phone),
+    eventType:pick(source.eventType,d.eventType,state.eventCore.eventType,state.forms?.wedding?'Wedding':state.forms?.corporate?'Corporate Event':state.forms?.private?'Private Party':''),
+    eventDate:pick(source.eventDate,d.eventDate,state.forms?.quote?.eventDate,state.eventCore.eventDate),
+    venueName:pick(source.venueName,d.venueName,state.forms?.quote?.venueName,state.eventCore.venueName),
+    venueCity:pick(source.venueCity,d.venueCity,state.eventCore.venueCity),
+    venueAddress:pick(source.venueAddress,d.venueAddress,state.eventCore.venueAddress),
+    setupStartTime:pick(source.setupStartTime,d.setupStartTime,state.eventCore.setupStartTime),
+    startTime:pick(source.startTime,d.startTime,d.ceremonyTime,state.eventCore.startTime),
+    endTime:pick(source.endTime,d.endTime,state.eventCore.endTime),
+    breakdownEndTime:pick(source.breakdownEndTime,d.breakdownEndTime,state.eventCore.breakdownEndTime),
+    guestCount:pick(source.guestCount,d.guestCount,state.eventCore.guestCount),
+    updatedAt:new Date().toISOString()
+  };
+  state.eventCore={...state.eventCore,...core};
+  return state.eventCore;
+}
+function propagateEventCore(){
+  const c=eventCoreFromState();
+  const shared={clientName:c.clientName,eventDate:c.eventDate,venueName:c.venueName,setupStartTime:c.setupStartTime,startTime:c.startTime,endTime:c.endTime,breakdownEndTime:c.breakdownEndTime,eventType:c.eventType};
+  ['quote','contract','wedding-planner','corporate-planner','private-planner','timeline'].forEach(id=>{
+    state.forms[id]=state.forms[id]||{};
+    Object.entries(shared).forEach(([k,v])=>{if(v)state.forms[id][k]=v});
+  });
+  ['wedding','corporate','private'].forEach(id=>{
+    if(!state.forms[id])return;
+    const f=state.forms[id];
+    if(c.clientName)f.primaryClient=c.clientName;
+    if(c.clientEmail)f.email=c.clientEmail;
+    if(c.clientPhone)f.phone=c.clientPhone;
+    ['eventDate','venueName','venueCity','venueAddress','setupStartTime','startTime','endTime','breakdownEndTime','guestCount'].forEach(k=>{if(c[k])f[k]=c[k]});
+  });
+}
+function workflowRecordForEvent(rows){return rows.find(r=>r.bookingRef===state.bookingId||r.eventRef===state.bookingId)}
+function syncFinancialRecordsFromEvent(){
+  const c=eventCoreFromState(), now=new Date().toISOString(), qf=state.forms.quote||{}, cf=state.forms.contract||{};
+  let quote=workflowRecordForEvent(crmQuotes);
+  if(Object.keys(qf).length){
+    const items=[1,2,3,4,5].map(i=>({description:qf[`item${i}Label`]||'',quantity:1,unitPriceCents:Math.round((Number(qf[`item${i}Amount`])||0)*100)})).filter(i=>i.description||i.unitPriceCents);
+    const row={...(quote||{}),id:quote?.id||crypto.randomUUID(),bookingRef:state.bookingId,eventRef:state.bookingId,number:quote?.number||makeRecordNumber('Q'),clientName:c.clientName,eventName:`${c.eventType||'Event'}${c.eventDate?' · '+c.eventDate:''}`,status:qf.quoteStatus||quote?.status||'Draft',depositPercent:Number(qf.depositRate||quote?.depositPercent||30),items:items.length?items:(quote?.items||[]),createdAt:quote?.createdAt||now,updatedAt:now};
+    crmQuotes=quote?crmQuotes.map(x=>x.id===quote.id?row:x):[row,...crmQuotes]; quote=row;
+  }
+  let contract=workflowRecordForEvent(crmContracts);
+  if(Object.keys(cf).length||quote?.status==='Accepted'){
+    const row={...(contract||{}),id:contract?.id||crypto.randomUUID(),bookingRef:state.bookingId,eventRef:state.bookingId,number:contract?.number||makeRecordNumber('C'),clientName:c.clientName,eventName:`${c.eventType||'Event'}${c.eventDate?' · '+c.eventDate:''}`,status:cf.contractStatus||contract?.status||'Draft',title:contract?.title||'Entertainment Services Agreement',terms:cf.terms||contract?.terms||'',createdAt:contract?.createdAt||now,updatedAt:now};
+    crmContracts=contract?crmContracts.map(x=>x.id===contract.id?row:x):[row,...crmContracts]; contract=row;
+  }
+  let invoice=workflowRecordForEvent(crmInvoices);
+  if(quote&&(['Accepted'].includes(quote.status)||contract)){
+    const total=quoteTotal(quote);
+    const row={...(invoice||{}),id:invoice?.id||crypto.randomUUID(),bookingRef:state.bookingId,eventRef:state.bookingId,number:invoice?.number||makeRecordNumber('INV'),clientName:c.clientName,eventName:quote.eventName,status:invoice?.status||'Draft',totalCents:total,dueDate:invoice?.dueDate||'',notes:invoice?.notes||'',createdAt:invoice?.createdAt||now,updatedAt:now};
+    crmInvoices=invoice?crmInvoices.map(x=>x.id===invoice.id?row:x):[row,...crmInvoices]; invoice=row;
+  }
+  saveLocalRows(QUOTES_KEY,crmQuotes);saveLocalRows(CONTRACTS_KEY,crmContracts);saveLocalRows(INVOICES_KEY,crmInvoices);
+  return {quote,contract,invoice};
+}
+function syncWorkflowFromRecords(){
+  const {quote,contract,invoice}=syncFinancialRecordsFromEvent();
+  const wf=ensureWorkflow(state);
+  const advance=(action,actor)=>{if(allowedActions(state,actor).includes(action))transitionWorkflow(state,action,actor)};
+  if(Object.keys(activeConsultation()).length&&wf.currentState==='BOOKING_REQUEST_RECEIVED')advance('send_event_form','organization');
+  if(Object.keys(activeConsultation()).length&&wf.currentState==='EVENT_FORM_PENDING')advance('submit_event_form','client');
+  if(quote&&['Sent','Viewed','Accepted'].includes(quote.status)&&wf.currentState==='QUOTE_PREPARATION')advance('send_quote','organization');
+  if(quote?.status==='Accepted'&&wf.currentState==='QUOTE_REVIEW')advance('accept_quote','client');
+  if(contract&&['Sent','Viewed','Signed'].includes(contract.status)&&wf.currentState==='CONTRACT_PREPARATION')advance('send_contract_deposit','organization');
+  if(contract?.status==='Signed'&&wf.currentState==='CONTRACT_DEPOSIT_PENDING'&&!wf.contractSigned)advance('sign_contract','client');
+  const depositDue=quote?Math.round(quoteTotal(quote)*(Number(quote.depositPercent)||0)/100):0;
+  const verified=invoice?crmPayments.filter(p=>p.invoiceId===invoice.id&&p.status==='Verified').reduce((a,p)=>a+(Number(p.amountCents)||0),0):0;
+  if(wf.currentState==='CONTRACT_DEPOSIT_PENDING'&&depositDue>0&&verified>=depositDue&&!wf.depositPaid)advance('pay_deposit','client');
+  const planner=state.forms['wedding-planner']||state.forms['corporate-planner']||state.forms['private-planner']||{};
+  if(wf.currentState==='PLANNING_FORM_PREPARATION'&&Object.keys(planner).length)advance('send_planning_form','organization');
+  if(wf.currentState==='PLANNING_FORM_PENDING'&&Object.keys(planner).length)advance('submit_planning_form','client');
+  if(wf.currentState==='PLANNING_REVIEW'&&Object.keys(state.forms.timeline||{}).length)advance('approve_planning','organization');
+  if(wf.currentState==='FINAL_PAYMENT_PENDING'&&invoice&&invoiceBalance(invoice)<=0)advance('record_final_payment','organization');
+}
+function synchronizeEntireWorkflow(){propagateEventCore();syncWorkflowFromRecords();}
+
 function save(show=true){
+  synchronizeEntireWorkflow();
   state.updated=new Date().toISOString();
   localStorage.setItem(KEY,JSON.stringify(state));
 
@@ -1532,16 +1623,8 @@ function bindContractEditor(){
 
 
 function currentEventDetails(){
-  const d=activeConsultation(),q=state.forms.quote||{};
-  const type=state.forms.wedding?'Wedding':state.forms.corporate?'Corporate Event':state.forms.private?'Private Party':'Event';
-  return {
-    bookingRef:state.bookingId,
-    clientName:d.primaryClient||d.company||q.clientName||'Client',
-    email:d.email||q.clientEmail||'',
-    eventType:type,
-    eventDate:d.eventDate||q.eventDate||'',
-    venueName:d.venueName||q.venueName||'Venue not entered'
-  };
+  const c=eventCoreFromState();
+  return {bookingRef:state.bookingId,clientName:c.clientName||'Client',email:c.clientEmail||'',eventType:c.eventType||'Event',eventDate:c.eventDate||'',venueName:c.venueName||'Venue not entered'};
 }
 function portalProgress(){
   const completed=state.completed||[];

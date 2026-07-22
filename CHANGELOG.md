@@ -1,4 +1,4 @@
-# Galaxy Cue v10.0.4
+# Galaxy Cue v10.1.0
 
 - Fixed Save Now reverting current form edits.
 - Unified type-aware restoration for radio buttons and checkbox groups.
