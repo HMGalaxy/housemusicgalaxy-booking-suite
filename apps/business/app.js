@@ -1,7 +1,7 @@
-import {bootstrapGalaxyCue} from '../../shared/js/core/bootstrap.js?v=10100';
-import {ensureWorkflow,getWorkflowState,allowedActions,transitionWorkflow,workflowProgress,ACTION_LABELS,WORKFLOW_STATES} from '../../shared/js/core/workflow.js?v=10100';
+import {bootstrapGalaxyCue} from '../../shared/js/core/bootstrap.js?v=10200';
+import {ensureWorkflow,getWorkflowState,allowedActions,transitionWorkflow,workflowProgress,ACTION_LABELS,WORKFLOW_STATES} from '../../shared/js/core/workflow.js?v=10200';
 const galaxyCueRuntime=bootstrapGalaxyCue();
-import {modules,weddingForm,corporateForm,privateForm,quoteForm,contractForm,weddingPlannerForm,corporatePlannerForm,privatePlannerForm,timelineForm,uploadsView,messagesView} from '../../shared/js/modules.js?v=10100';
+import {modules,weddingForm,corporateForm,privateForm,quoteForm,contractForm,weddingPlannerForm,corporatePlannerForm,privatePlannerForm,timelineForm,uploadsView,messagesView} from '../../shared/js/modules.js?v=10200';
 let supabase=null;
 let getCurrentUser=async()=>null;
 let restoreAuthSession=async()=>({user:null,error:null,handled:false});
@@ -361,7 +361,7 @@ async function runAutoCloudSync({notify=false}={}){
 
 
 
-// ---- Unified event workflow bridge (v10.1.0) ----
+// ---- Unified event workflow bridge (v10.2.0) ----
 function eventCoreFromState(){
   state.eventCore=state.eventCore||{};
   const d=activeConsultation();
@@ -448,6 +448,21 @@ function syncWorkflowFromRecords(){
   if(wf.currentState==='FINAL_PAYMENT_PENDING'&&invoice&&invoiceBalance(invoice)<=0)advance('record_final_payment','organization');
 }
 function synchronizeEntireWorkflow(){propagateEventCore();syncWorkflowFromRecords();}
+function persistWorkflowConnection({render=false,notify=false}={}){
+  synchronizeEntireWorkflow();
+  state.updated=new Date().toISOString();
+  localStorage.setItem(KEY,JSON.stringify(state));
+  upsertLocalEvent(state);
+  if(currentUser&&activeBusinessId())queueAutoCloudSync({immediate:false,notify:false});
+  galaxyCueRuntime.bus.emit('workflow:updated',{bookingRef:state.bookingId,state:getWorkflowState(state),eventCore:state.eventCore});
+  if(notify)toast('Workflow updated');
+  if(render)shell();
+}
+function attachActiveEvent(record={}){
+  if(!state?.bookingId)return record;
+  const core=eventCoreFromState();
+  return {...record,bookingRef:record.bookingRef||state.bookingId,eventRef:record.eventRef||state.bookingId,clientId:record.clientId||core.clientId||'',clientName:record.clientName||core.clientName||'',eventName:record.eventName||`${core.eventType||'Event'}${core.eventDate?' · '+core.eventDate:''}`};
+}
 
 function save(show=true){
   synchronizeEntireWorkflow();
@@ -1458,7 +1473,7 @@ function quoteItemRow(item,idx){
 function bindQuoteEditor(){
   document.querySelectorAll('[data-edit-quote]').forEach(b=>b.addEventListener('click',()=>{const q=crmQuotes.find(x=>x.id===b.dataset.editQuote);document.querySelector('.booking-preview-panel').innerHTML=quoteEditor(q);bindQuoteEditor()}));
   document.querySelectorAll('[data-delete-quote]').forEach(b=>b.addEventListener('click',()=>{if(!confirm('Delete this quote?'))return;crmQuotes=crmQuotes.filter(x=>x.id!==b.dataset.deleteQuote);saveLocalRows(QUOTES_KEY,crmQuotes);selectedQuoteId=null;renderQuotes();toast('Quote deleted')}));
-  document.querySelectorAll('[data-accept-quote]').forEach(b=>b.addEventListener('click',()=>{crmQuotes=crmQuotes.map(q=>q.id===b.dataset.acceptQuote?{...q,status:'Accepted',updatedAt:new Date().toISOString()}:q);saveLocalRows(QUOTES_KEY,crmQuotes);renderQuotes();toast('Quote accepted')}));
+  document.querySelectorAll('[data-accept-quote]').forEach(b=>b.addEventListener('click',()=>{crmQuotes=crmQuotes.map(q=>q.id===b.dataset.acceptQuote?attachActiveEvent({...q,status:'Accepted',updatedAt:new Date().toISOString()}):q);saveLocalRows(QUOTES_KEY,crmQuotes);persistWorkflowConnection();renderQuotes();toast('Quote accepted · workflow updated')}));
   document.querySelectorAll('[data-contract-from-quote]').forEach(b=>b.addEventListener('click',()=>createContractFromQuote(b.dataset.contractFromQuote)));
   document.querySelectorAll('[data-invoice-from-quote]').forEach(b=>b.addEventListener('click',()=>createInvoiceFromQuote(b.dataset.invoiceFromQuote)));
   const form=document.querySelector('#quoteEditor');
@@ -1466,7 +1481,7 @@ function bindQuoteEditor(){
   const add=form.querySelector('[data-add-quote-item]');
   if(add)add.addEventListener('click',()=>{const q=formToQuote(form);q.items.push({description:'',quantity:1,unitPriceCents:0});document.querySelector('.booking-preview-panel').innerHTML=quoteEditor(q);bindQuoteEditor()});
   form.querySelectorAll('[data-remove-quote-item]').forEach(b=>b.addEventListener('click',()=>{const q=formToQuote(form);q.items.splice(Number(b.dataset.removeQuoteItem),1);document.querySelector('.booking-preview-panel').innerHTML=quoteEditor(q);bindQuoteEditor()}));
-  form.addEventListener('submit',e=>{e.preventDefault();const q=formToQuote(form);q.id=q.id||crypto.randomUUID();q.createdAt=q.createdAt||new Date().toISOString();q.updatedAt=new Date().toISOString();crmQuotes=crmQuotes.some(x=>x.id===q.id)?crmQuotes.map(x=>x.id===q.id?q:x):[q,...crmQuotes];saveLocalRows(QUOTES_KEY,crmQuotes);selectedQuoteId=q.id;renderQuotes();toast('Quote saved')});
+  form.addEventListener('submit',e=>{e.preventDefault();let q=attachActiveEvent(formToQuote(form));q.id=q.id||crypto.randomUUID();q.createdAt=q.createdAt||new Date().toISOString();q.updatedAt=new Date().toISOString();crmQuotes=crmQuotes.some(x=>x.id===q.id)?crmQuotes.map(x=>x.id===q.id?q:x):[q,...crmQuotes];saveLocalRows(QUOTES_KEY,crmQuotes);selectedQuoteId=q.id;persistWorkflowConnection();renderQuotes();toast('Quote saved · workflow updated')});
 }
 function formToQuote(form){
   const fd=new FormData(form),items=[];
@@ -1477,8 +1492,8 @@ function formToQuote(form){
 }
 function createContractFromQuote(id){
   const q=crmQuotes.find(x=>x.id===id);if(!q)return;
-  const row={id:crypto.randomUUID(),number:makeRecordNumber('C'),quoteId:q.id,clientName:q.clientName,eventName:q.eventName,status:'Draft',title:'DJ Services Agreement',terms:`Services and pricing accepted from ${q.number}.`,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
-  crmContracts.unshift(row);saveLocalRows(CONTRACTS_KEY,crmContracts);selectedContractId=row.id;appView='contracts';shell();toast('Contract created from quote');
+  const row=attachActiveEvent({id:crypto.randomUUID(),number:makeRecordNumber('C'),quoteId:q.id,bookingRef:q.bookingRef,eventRef:q.eventRef,clientId:q.clientId,clientName:q.clientName,eventName:q.eventName,status:'Draft',title:'DJ Services Agreement',terms:`Services and pricing accepted from ${q.number}.`,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
+  crmContracts.unshift(row);saveLocalRows(CONTRACTS_KEY,crmContracts);selectedContractId=row.id;persistWorkflowConnection();appView='contracts';shell();toast('Contract created from quote · workflow connected');
 }
 
 
@@ -1496,7 +1511,7 @@ function invoiceStatus(i){
 function createInvoiceFromQuote(id){
   const q=crmQuotes.find(x=>x.id===id);if(!q)return;
   const total=quoteTotal(q);
-  const row={id:crypto.randomUUID(),number:makeRecordNumber('INV'),quoteId:q.id,clientName:q.clientName,eventName:q.eventName,status:'Draft',totalCents:total,dueDate:'',notes:q.notes||'',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+  const row=attachActiveEvent({id:crypto.randomUUID(),number:makeRecordNumber('INV'),quoteId:q.id,bookingRef:q.bookingRef,eventRef:q.eventRef,clientId:q.clientId,clientName:q.clientName,eventName:q.eventName,status:'Draft',totalCents:total,dueDate:'',notes:q.notes||'',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
   crmInvoices.unshift(row);saveLocalRows(INVOICES_KEY,crmInvoices);selectedInvoiceId=row.id;appView='invoices';shell();toast('Invoice created from quote');
 }
 function renderInvoices(){
@@ -1539,7 +1554,7 @@ function bindInvoiceEditor(){
   document.querySelectorAll('[data-delete-invoice]').forEach(b=>b.addEventListener('click',()=>{if(!confirm('Delete this invoice?'))return;crmInvoices=crmInvoices.filter(x=>x.id!==b.dataset.deleteInvoice);crmPayments=crmPayments.filter(p=>p.invoiceId!==b.dataset.deleteInvoice);saveLocalRows(INVOICES_KEY,crmInvoices);saveLocalRows(PAYMENTS_KEY,crmPayments);selectedInvoiceId=null;renderInvoices();toast('Invoice deleted')}));
   document.querySelectorAll('[data-record-payment]').forEach(b=>b.addEventListener('click',()=>openPaymentEditor(b.dataset.recordPayment)));
   const form=document.querySelector('#invoiceEditor');if(!form)return;
-  form.addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(form),id=String(fd.get('id')||''),existing=crmInvoices.find(x=>x.id===id)||{};const row={...existing,id:id||crypto.randomUUID(),number:String(fd.get('number')||makeRecordNumber('INV')),clientName:String(fd.get('clientName')||''),eventName:String(fd.get('eventName')||''),status:String(fd.get('status')||'Draft'),totalCents:Math.round(Number(fd.get('total')||0)*100),dueDate:String(fd.get('dueDate')||''),notes:String(fd.get('notes')||''),createdAt:existing.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()};crmInvoices=id?crmInvoices.map(x=>x.id===id?row:x):[row,...crmInvoices];saveLocalRows(INVOICES_KEY,crmInvoices);selectedInvoiceId=row.id;renderInvoices();toast('Invoice saved')});
+  form.addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(form),id=String(fd.get('id')||''),existing=crmInvoices.find(x=>x.id===id)||{};const row=attachActiveEvent({...existing,id:id||crypto.randomUUID(),number:String(fd.get('number')||makeRecordNumber('INV')),clientName:String(fd.get('clientName')||''),eventName:String(fd.get('eventName')||''),status:String(fd.get('status')||'Draft'),totalCents:Math.round(Number(fd.get('total')||0)*100),dueDate:String(fd.get('dueDate')||''),notes:String(fd.get('notes')||''),createdAt:existing.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()});crmInvoices=id?crmInvoices.map(x=>x.id===id?row:x):[row,...crmInvoices];saveLocalRows(INVOICES_KEY,crmInvoices);selectedInvoiceId=row.id;persistWorkflowConnection();renderInvoices();toast('Invoice saved · workflow updated')});
 }
 function openPaymentEditor(invoiceId=''){
   appView='payments';selectedPaymentId=null;shell();
@@ -1574,10 +1589,10 @@ function paymentEditor(p={id:'',invoiceId:'',amountCents:0,method:'Venmo',status
 }
 function bindPaymentEditor(){
   document.querySelectorAll('[data-edit-payment]').forEach(b=>b.addEventListener('click',()=>{const p=crmPayments.find(x=>x.id===b.dataset.editPayment);document.querySelector('.booking-preview-panel').innerHTML=paymentEditor(p);bindPaymentEditor()}));
-  document.querySelectorAll('[data-verify-payment]').forEach(b=>b.addEventListener('click',()=>{crmPayments=crmPayments.map(p=>p.id===b.dataset.verifyPayment?{...p,status:'Verified',verifiedAt:new Date().toISOString(),updatedAt:new Date().toISOString()}:p);saveLocalRows(PAYMENTS_KEY,crmPayments);renderPayments();toast('Payment verified')}));
+  document.querySelectorAll('[data-verify-payment]').forEach(b=>b.addEventListener('click',()=>{crmPayments=crmPayments.map(p=>p.id===b.dataset.verifyPayment?{...p,status:'Verified',verifiedAt:new Date().toISOString(),updatedAt:new Date().toISOString()}:p);saveLocalRows(PAYMENTS_KEY,crmPayments);persistWorkflowConnection();renderPayments();toast('Payment verified · workflow updated')}));
   document.querySelectorAll('[data-delete-payment]').forEach(b=>b.addEventListener('click',()=>{if(!confirm('Delete this payment?'))return;crmPayments=crmPayments.filter(x=>x.id!==b.dataset.deletePayment);saveLocalRows(PAYMENTS_KEY,crmPayments);selectedPaymentId=null;renderPayments();toast('Payment deleted')}));
   const form=document.querySelector('#paymentEditor');if(!form)return;
-  form.addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(form),id=String(fd.get('id')||''),existing=crmPayments.find(x=>x.id===id)||{};const row={...existing,id:id||crypto.randomUUID(),invoiceId:String(fd.get('invoiceId')||''),amountCents:Math.round(Number(fd.get('amount')||0)*100),method:String(fd.get('method')||'Other'),status:String(fd.get('status')||'Submitted'),reference:String(fd.get('reference')||''),note:String(fd.get('note')||''),createdAt:existing.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()};crmPayments=id?crmPayments.map(x=>x.id===id?row:x):[row,...crmPayments];saveLocalRows(PAYMENTS_KEY,crmPayments);selectedPaymentId=row.id;renderPayments();toast('Payment saved')});
+  form.addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(form),id=String(fd.get('id')||''),existing=crmPayments.find(x=>x.id===id)||{};const invoice=crmInvoices.find(x=>x.id===String(fd.get('invoiceId')||''));const row={...existing,id:id||crypto.randomUUID(),invoiceId:String(fd.get('invoiceId')||''),bookingRef:existing.bookingRef||invoice?.bookingRef||'',eventRef:existing.eventRef||invoice?.eventRef||'',amountCents:Math.round(Number(fd.get('amount')||0)*100),method:String(fd.get('method')||'Other'),status:String(fd.get('status')||'Submitted'),reference:String(fd.get('reference')||''),note:String(fd.get('note')||''),createdAt:existing.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()};crmPayments=id?crmPayments.map(x=>x.id===id?row:x):[row,...crmPayments];saveLocalRows(PAYMENTS_KEY,crmPayments);selectedPaymentId=row.id;persistWorkflowConnection();renderPayments();toast('Payment saved · workflow updated')});
 }
 
 function renderContracts(){
@@ -1616,9 +1631,9 @@ function contractEditor(c={id:'',number:makeRecordNumber('C'),clientName:'',even
 function bindContractEditor(){
   document.querySelectorAll('[data-edit-contract]').forEach(b=>b.addEventListener('click',()=>{const c=crmContracts.find(x=>x.id===b.dataset.editContract);document.querySelector('.booking-preview-panel').innerHTML=contractEditor(c);bindContractEditor()}));
   document.querySelectorAll('[data-delete-contract]').forEach(b=>b.addEventListener('click',()=>{if(!confirm('Delete this contract?'))return;crmContracts=crmContracts.filter(x=>x.id!==b.dataset.deleteContract);saveLocalRows(CONTRACTS_KEY,crmContracts);selectedContractId=null;renderContracts();toast('Contract deleted')}));
-  document.querySelectorAll('[data-sign-contract]').forEach(b=>b.addEventListener('click',()=>{crmContracts=crmContracts.map(c=>c.id===b.dataset.signContract?{...c,status:'Signed',signedAt:new Date().toISOString(),updatedAt:new Date().toISOString()}:c);saveLocalRows(CONTRACTS_KEY,crmContracts);renderContracts();toast('Contract marked signed')}));
+  document.querySelectorAll('[data-sign-contract]').forEach(b=>b.addEventListener('click',()=>{crmContracts=crmContracts.map(c=>c.id===b.dataset.signContract?attachActiveEvent({...c,status:'Signed',signedAt:new Date().toISOString(),updatedAt:new Date().toISOString()}):c);saveLocalRows(CONTRACTS_KEY,crmContracts);persistWorkflowConnection();renderContracts();toast('Contract signed · workflow updated')}));
   const form=document.querySelector('#contractEditor');if(!form)return;
-  form.addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(form),id=String(fd.get('id')||''),existing=crmContracts.find(x=>x.id===id)||{};const row={...existing,id:id||crypto.randomUUID(),number:String(fd.get('number')||makeRecordNumber('C')),clientName:String(fd.get('clientName')||''),eventName:String(fd.get('eventName')||''),status:String(fd.get('status')||'Draft'),title:String(fd.get('title')||'DJ Services Agreement'),terms:String(fd.get('terms')||''),createdAt:existing.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()};crmContracts=id?crmContracts.map(x=>x.id===id?row:x):[row,...crmContracts];saveLocalRows(CONTRACTS_KEY,crmContracts);selectedContractId=row.id;renderContracts();toast('Contract saved')});
+  form.addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(form),id=String(fd.get('id')||''),existing=crmContracts.find(x=>x.id===id)||{};const row=attachActiveEvent({...existing,id:id||crypto.randomUUID(),number:String(fd.get('number')||makeRecordNumber('C')),clientName:String(fd.get('clientName')||''),eventName:String(fd.get('eventName')||''),status:String(fd.get('status')||'Draft'),title:String(fd.get('title')||'DJ Services Agreement'),terms:String(fd.get('terms')||''),createdAt:existing.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()});crmContracts=id?crmContracts.map(x=>x.id===id?row:x):[row,...crmContracts];saveLocalRows(CONTRACTS_KEY,crmContracts);selectedContractId=row.id;persistWorkflowConnection();renderContracts();toast('Contract saved · workflow updated')});
 }
 
 
@@ -2395,7 +2410,7 @@ function renderMain(){
     const saved={...(state.forms[state.active]||{}),...(state.forms[`template-${context}`]||{})};fill(form,saved);
     document.querySelectorAll('.dynamic-template-panel input').forEach(input=>{if(Array.isArray(saved[input.name]))input.checked=saved[input.name].includes(input.value);else input.checked=saved[input.name]===true||String(saved[input.name])===String(input.value);input.addEventListener('change',()=>{const templateForm=document.querySelector('.dynamic-template-panel');if(!templateForm)return;state.forms[`template-${context}`]=dataFrom(templateForm);save(false);});});
     form.addEventListener('input',()=>{state.forms[state.active]=dataFrom(form);save(false);if(state.active==='quote')updateQuoteTotals();if(state.active==='contract')updateContractTotals()});
-    form.addEventListener('submit',e=>{e.preventDefault();if(!form.reportValidity())return;state.forms[state.active]=dataFrom(form);if(!state.completed.includes(state.active))state.completed.push(state.active);save();toast('Workspace completed');renderMain()});
+    form.addEventListener('submit',e=>{e.preventDefault();if(!form.reportValidity())return;state.forms[state.active]=dataFrom(form);if(!state.completed.includes(state.active))state.completed.push(state.active);save();toast(`${modules.find(x=>x.id===state.active)?.label||'Workspace'} completed · workflow updated`);renderMain()});
     if(state.active==='quote')updateQuoteTotals();if(state.active==='contract')updateContractTotals();
   }
   bindActions();bindWorkflowActions();bindNav();if(context)bindClientEditor();
