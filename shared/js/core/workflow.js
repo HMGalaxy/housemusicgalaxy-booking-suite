@@ -88,6 +88,67 @@ export function transitionWorkflow(eventState,action,actor){
   return {ok:true,workflow};
 }
 
+
+
+const ORDERED_STATE_IDS=Object.freeze(Object.entries(WORKFLOW_STATES)
+  .filter(([id,state])=>id!=='DECLINED'&&Number.isFinite(state.order))
+  .sort((a,b)=>a[1].order-b[1].order)
+  .map(([id])=>id));
+
+function stateIndex(id){return Math.max(0,ORDERED_STATE_IDS.indexOf(id))}
+function appendSystemHistory(workflow,to,reason,now){
+  const from=workflow.currentState;
+  if(from===to)return;
+  workflow.currentState=to;
+  workflow.enteredAt=now;
+  workflow.history.push({id:crypto.randomUUID(),from,to,action:reason,actor:'system',at:now});
+}
+
+/**
+ * Reconcile the workflow from the records already stored by the existing forms.
+ * This is deliberately monotonic: ordinary edits never move a booking backwards.
+ * Explicit manual transitions (for example Return for Changes) still use
+ * transitionWorkflow().
+ */
+export function reconcileWorkflow(eventState,facts={}){
+  const workflow=ensureWorkflow(eventState);
+  const now=new Date().toISOString();
+  const quoteStatus=String(facts.quoteStatus||'').toLowerCase();
+  const contractStatus=String(facts.contractStatus||'').toLowerCase();
+  const invoiceBalanceCents=Number(facts.invoiceBalanceCents);
+
+  workflow.contractSigned=Boolean(workflow.contractSigned||facts.contractSigned||contractStatus==='signed');
+  workflow.depositPaid=Boolean(workflow.depositPaid||facts.depositPaid);
+
+  let target='BOOKING_REQUEST_RECEIVED';
+  if(facts.eventFormStarted||facts.eventFormCompleted)target='EVENT_FORM_PENDING';
+  if(facts.eventFormCompleted)target='QUOTE_PREPARATION';
+  if(['sent','viewed','accepted'].includes(quoteStatus))target='QUOTE_REVIEW';
+  if(quoteStatus==='accepted')target='CONTRACT_PREPARATION';
+  if(['sent','viewed','signed'].includes(contractStatus))target='CONTRACT_DEPOSIT_PENDING';
+  if(workflow.contractSigned&&workflow.depositPaid)target='PLANNING_FORM_PREPARATION';
+  if(facts.planningStarted||facts.planningCompleted)target='PLANNING_FORM_PENDING';
+  if(facts.planningCompleted)target='PLANNING_REVIEW';
+  if(facts.planningApproved)target='EVENT_READY';
+  if(facts.eventCompleted)target='EVENT_COMPLETED';
+  if(facts.finalPaymentRequested)target='FINAL_PAYMENT_PENDING';
+  if(facts.finalPaymentPaid||(Number.isFinite(invoiceBalanceCents)&&invoiceBalanceCents<=0&&facts.hasInvoice&&facts.eventCompleted))target='PAID_COMPLETED';
+  if(facts.archived)target='ARCHIVED';
+
+  if(workflow.currentState==='DECLINED'&&quoteStatus!=='accepted')return {ok:true,workflow,changed:false};
+  const currentIndex=stateIndex(workflow.currentState);
+  const targetIndex=stateIndex(target);
+  if(targetIndex>currentIndex){
+    for(let i=currentIndex+1;i<=targetIndex;i++)appendSystemHistory(workflow,ORDERED_STATE_IDS[i],'records_reconciled',now);
+    workflow.updatedAt=now;
+    syncOwner(workflow);
+    return {ok:true,workflow,changed:true};
+  }
+  workflow.updatedAt=now;
+  syncOwner(workflow);
+  return {ok:true,workflow,changed:false};
+}
+
 export function workflowProgress(eventState){
   const state=getWorkflowState(eventState);
   if(state.id==='DECLINED')return 0;

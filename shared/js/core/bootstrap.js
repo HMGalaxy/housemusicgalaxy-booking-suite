@@ -2,9 +2,9 @@ import {createEventBus} from './event-bus.js';
 import {createStore} from './state.js';
 import {storage} from './storage.js';
 
-export const VERSION='10.0.4';
-export const RELEASE='Business OS Logic Stabilization';
-export const BUILD='2026-07-22T17:15:00Z';
+export const VERSION='10.3.0';
+export const RELEASE='Connected Workflow Runtime';
+export const BUILD='2026-07-22T23:30:00Z';
 
 export function bootstrapGalaxyCue(){
   const bus=createEventBus();
