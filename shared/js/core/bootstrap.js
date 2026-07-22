@@ -2,7 +2,7 @@ import {createEventBus} from './event-bus.js';
 import {createStore} from './state.js';
 import {storage} from './storage.js';
 
-export const VERSION='8.0.0';
+export const VERSION='9.0.0';
 export const RELEASE='Shared Brand Assets and Version Alignment';
 export const BUILD='2026-07-21T21:15:00Z';
 

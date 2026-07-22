@@ -1,22 +1,23 @@
-# Galaxy Cue OS v8.0.0
+# Galaxy Cue OS v9.0.0
 
-A separated three-application foundation for platform administrators, entertainment businesses and clients.
+Business OS production milestone built on the separated Admin, Business and Client applications.
 
-## Deploy to GitHub Pages
+## Release focus
 
-Upload the **contents of this folder** to the repository root. Configure Pages to deploy from `main` and `/ (root)`.
+- Business OS navigation and typography consistency
+- Dashboard 2.0 command center
+- Event-centric workspace and workflow
+- Client relationship workspace
+- Calendar and timeline foundation
+- Financial hub for quotes, invoices and payments
+- Automation Center foundation
+- Premium design-system polish and responsive behavior
+- Version verification badges on Admin OS, Business OS and Client App
 
-## Application URLs
+## Applications
 
-- Admin: `apps/admin/`
-- Business: `apps/business/`
-- Client: `apps/client/`
-- Launcher: `platform.html`
+- `apps/business/` — current optimization focus
+- `apps/client/` — preserved for its dedicated optimization phase
+- `apps/admin/` — preserved for its dedicated optimization phase
 
-## Supabase
-
-The existing Supabase project is retained. Add this redirect pattern in Authentication URL Configuration:
-
-`https://hmgalaxy.github.io/housemusicgalaxy-booking-suite/**`
-
-Run the existing v7.0.4 admin access SQL only if Admin access has not already been configured.
+Upload the contents of this folder to the GitHub Pages repository root.
