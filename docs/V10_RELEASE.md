@@ -1,4 +1,4 @@
-# Galaxy Cue v10.0.0
+# Galaxy Cue v10.0.1
 
 ## Verified Business OS fixes
 - Business Login opens the Business authentication modal.

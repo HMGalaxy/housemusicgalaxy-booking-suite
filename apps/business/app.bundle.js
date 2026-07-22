@@ -1,7 +1,7 @@
-import {bootstrapGalaxyCue} from '../../shared/js/core/bootstrap.js?v=10000';
-import {ensureWorkflow,getWorkflowState,allowedActions,transitionWorkflow,workflowProgress,ACTION_LABELS,WORKFLOW_STATES} from '../../shared/js/core/workflow.js?v=10000';
+import {bootstrapGalaxyCue} from '../../shared/js/core/bootstrap.js?v=10001';
+import {ensureWorkflow,getWorkflowState,allowedActions,transitionWorkflow,workflowProgress,ACTION_LABELS,WORKFLOW_STATES} from '../../shared/js/core/workflow.js?v=10001';
 const galaxyCueRuntime=bootstrapGalaxyCue();
-import {modules,weddingForm,corporateForm,privateForm,quoteForm,contractForm,weddingPlannerForm,corporatePlannerForm,privatePlannerForm,timelineForm,uploadsView,messagesView} from '../../shared/js/modules.js?v=10000';
+import {modules,weddingForm,corporateForm,privateForm,quoteForm,contractForm,weddingPlannerForm,corporatePlannerForm,privatePlannerForm,timelineForm,uploadsView,messagesView} from '../../shared/js/modules.js?v=10001';
 let supabase=null;
 let getCurrentUser=async()=>null;
 let restoreAuthSession=async()=>({user:null,error:null,handled:false});
@@ -743,12 +743,6 @@ function loadTemplateSettings(){
 }
 function saveTemplateSettings(settings){localStorage.setItem(TEMPLATE_SETTINGS_KEY,JSON.stringify(settings));}
 function templateItemsFor(context){return loadTemplateSettings().items.filter(item=>item.enabled&&item[context]);}
-function renderDynamicTemplateChoices(context){
-  const items=templateItemsFor(context);if(!items.length)return'';
-  const categories={services:'Services',audio:'Audio',lighting:'Lighting',effects:'Effects',entertainment:'Entertainment',other:'Other'};
-  const grouped=items.reduce((acc,item)=>{(acc[item.category]||(acc[item.category]=[])).push(item);return acc},{});
-  return `<section class="dynamic-template-panel"><div class="section-title"><div><small>Configured for this business</small><h2>Services & Production</h2></div><span class="autosave-chip">Saved automatically</span></div><p class="settings-note">Only items enabled in Settings appear here.</p><div class="dynamic-template-groups">${Object.entries(grouped).map(([category,rows])=>`<fieldset><legend>${categories[category]||category}</legend><div class="dynamic-option-grid">${rows.map(item=>`<label class="dynamic-option"><input type="checkbox" name="template_${context}_${item.id}" value="${escapeHtml(item.name)}"><span><strong>${escapeHtml(item.name)}</strong>${item.equipmentRequired?'<small>Equipment-related</small>':''}</span></label>`).join('')}</div></fieldset>`).join('')}</div></section>`;
-}
 function renderTemplateCard(item){return `<button class="v9-template-card" data-module="${item.id}"><span class="v9-template-icon">${item.icon}</span><div><small>${item.type}</small><h2>${item.title}</h2><p>${item.description}</p></div><em>Open form →</em></button>`;}
 function renderConsultationHub(){
   const settings=loadTemplateSettings();
@@ -2237,7 +2231,7 @@ function renderMain(){
   main.dataset.workspaceModule=state.active;
   const overview=workspaceOverview();
   const context=['wedding','corporate','private'].includes(state.active)?'consultation':['wedding-planner','corporate-planner','private-planner'].includes(state.active)?'planning':null;
-  main.innerHTML=`<section class="hero workspace-hero"><div><button class="text-button back-dashboard" data-view="${context==='planning'?'planning':context==='consultation'?'consultations':'dashboard'}">← Back</button><div class="eyebrow">Current Event · ${state.bookingId}</div><h1>${m.label}</h1><p>${m.description} ${currentUser?'Changes save and sync automatically while you are signed in.':'Changes save automatically in this browser.'}</p></div></section>${overview}<div class="booking-strip"><div class="ref"><small>Event Reference</small><br><strong>${state.bookingId}</strong></div><div class="actions"><span class="autosave-chip">● Saved locally</span><button class="btn" data-action="save">Save Now</button><button class="btn primary" data-action="cloud-sync">${currentUser?'Sync Now':'Sign in to Sync'}</button></div></div>${context?renderDynamicTemplateChoices(context):''}<div id="module"></div><div class="footer-note">Galaxy Cue · Entertainment Company Operating System</div>`;
+  main.innerHTML=`<section class="hero workspace-hero"><div><button class="text-button back-dashboard" data-view="${context==='planning'?'planning':context==='consultation'?'consultations':'dashboard'}">← Back</button><div class="eyebrow">Current Event · ${state.bookingId}</div><h1>${m.label}</h1><p>${m.description} ${currentUser?'Changes save and sync automatically while you are signed in.':'Changes save automatically in this browser.'}</p></div></section>${overview}<div class="booking-strip"><div class="ref"><small>Event Reference</small><br><strong>${state.bookingId}</strong></div><div class="actions"><span class="autosave-chip">● Saved locally</span><button class="btn" data-action="save">Save Now</button><button class="btn primary" data-action="cloud-sync">${currentUser?'Sync Now':'Sign in to Sync'}</button></div></div><div id="module"></div><div class="footer-note">Galaxy Cue · Entertainment Company Operating System</div>`;
   const host=document.querySelector('#module'),source=activeConsultation();
   host.className=`module-host module-${state.active}`;host.dataset.module=state.active;
   if(state.active==='wedding')host.innerHTML=weddingForm();
