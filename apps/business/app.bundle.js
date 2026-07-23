@@ -1,7 +1,7 @@
-import {bootstrapGalaxyCue} from '../../shared/js/core/bootstrap.js?v=10301';
-import {ensureWorkflow,getWorkflowState,allowedActions,transitionWorkflow,reconcileWorkflow,workflowProgress,ACTION_LABELS,WORKFLOW_STATES} from '../../shared/js/core/workflow.js?v=10301';
+import {bootstrapGalaxyCue} from '../../shared/js/core/bootstrap.js?v=10302';
+import {ensureWorkflow,getWorkflowState,allowedActions,transitionWorkflow,reconcileWorkflow,workflowProgress,ACTION_LABELS,WORKFLOW_STATES} from '../../shared/js/core/workflow.js?v=10302';
 const galaxyCueRuntime=bootstrapGalaxyCue();
-import {modules,weddingForm,corporateForm,privateForm,quoteForm,contractForm,weddingPlannerForm,corporatePlannerForm,privatePlannerForm,timelineForm,uploadsView,messagesView} from '../../shared/js/modules.js?v=10301';
+import {modules,weddingForm,corporateForm,privateForm,quoteForm,contractForm,weddingPlannerForm,corporatePlannerForm,privatePlannerForm,timelineForm,uploadsView,messagesView} from '../../shared/js/modules.js?v=10302';
 let supabase=null;
 let getCurrentUser=async()=>null;
 let restoreAuthSession=async()=>({user:null,error:null,handled:false});
@@ -362,7 +362,7 @@ async function runAutoCloudSync({notify=false}={}){
 
 
 
-// ---- Unified event workflow bridge (v10.3.1) ----
+// ---- Unified event workflow bridge (v10.3.2) ----
 function eventCoreFromState(){
   state.eventCore=state.eventCore||{};
   const d=activeConsultation();
@@ -509,6 +509,29 @@ function syncPaymentSummaryToWorkspace(invoice){
   contract.depositStatus=verified>0?'Received':'Not received';
   contract.balanceRemaining=(invoiceBalance(invoice)/100).toFixed(2);
   state.forms.contract=contract;
+}
+
+let stableDraftPersistTimer=null;
+function scheduleStableDraftPersist(){
+  clearTimeout(stableDraftPersistTimer);
+  stableDraftPersistTimer=setTimeout(()=>{
+    const scrollX=window.scrollX;
+    const scrollY=window.scrollY;
+    const active=document.activeElement;
+    const selector=active&&active.matches?.('[name]')?`[name="${CSS.escape(active.name)}"]`:null;
+    synchronizeEntireWorkflow();
+    state.updated=new Date().toISOString();
+    localStorage.setItem(KEY,JSON.stringify(state));
+    if(currentUser&&activeBusinessId())queueAutoCloudSync({immediate:false,notify:false});
+    else upsertLocalEvent(state);
+    requestAnimationFrame(()=>{
+      window.scrollTo(scrollX,scrollY);
+      if(selector){
+        const replacement=document.querySelector(`#module ${selector}`);
+        if(replacement&&document.activeElement!==replacement)replacement.focus({preventScroll:true});
+      }
+    });
+  },700);
 }
 
 function save(show=true){
@@ -2456,9 +2479,19 @@ function renderMain(){
   const form=host.querySelector('form');
   if(form){
     const saved={...(state.forms[state.active]||{}),...(state.forms[`template-${context}`]||{})};fill(form,saved);
-    document.querySelectorAll('.dynamic-template-panel input').forEach(input=>{if(Array.isArray(saved[input.name]))input.checked=saved[input.name].includes(input.value);else input.checked=saved[input.name]===true||String(saved[input.name])===String(input.value);input.addEventListener('change',()=>{const templateForm=document.querySelector('.dynamic-template-panel');if(!templateForm)return;state.forms[`template-${context}`]=dataFrom(templateForm);save(false);});});
-    form.addEventListener('input',()=>{state.forms[state.active]=dataFrom(form);save(false);if(state.active==='quote')updateQuoteTotals();if(state.active==='contract')updateContractTotals()});
-    form.addEventListener('submit',e=>{e.preventDefault();if(!form.reportValidity())return;state.forms[state.active]=dataFrom(form);if(!state.completed.includes(state.active))state.completed.push(state.active);save();toast('Workspace completed');renderMain()});
+    const moduleId=state.active;
+    document.querySelectorAll('.dynamic-template-panel input').forEach(input=>{if(Array.isArray(saved[input.name]))input.checked=saved[input.name].includes(input.value);else input.checked=saved[input.name]===true||String(saved[input.name])===String(input.value);input.addEventListener('change',()=>{const templateForm=document.querySelector('.dynamic-template-panel');if(!templateForm)return;state.forms[`template-${context}`]=dataFrom(templateForm);scheduleStableDraftPersist();});});
+    const captureDraft=()=>{
+      state.forms[moduleId]=dataFrom(form);
+      state.updated=new Date().toISOString();
+      localStorage.setItem(KEY,JSON.stringify(state));
+      if(moduleId==='quote')updateQuoteTotals();
+      if(moduleId==='contract')updateContractTotals();
+      scheduleStableDraftPersist();
+    };
+    form.addEventListener('input',captureDraft);
+    form.addEventListener('change',captureDraft);
+    form.addEventListener('submit',e=>{e.preventDefault();if(!form.reportValidity())return;state.forms[moduleId]=dataFrom(form);if(!state.completed.includes(moduleId))state.completed.push(moduleId);save();toast('Workspace completed');renderMain()});
     if(state.active==='quote')updateQuoteTotals();if(state.active==='contract')updateContractTotals();
   }
   bindActions();bindWorkflowActions();bindNav();if(context)bindClientEditor();
@@ -2491,12 +2524,7 @@ function installWorkspaceInteractionGuards(){
     }
   });
 
-  // Never leave a stale mobile backdrop over a desktop/workspace form.
-  document.addEventListener('focusin',event=>{
-    if(event.target.matches?.('#main input,#main select,#main textarea,#main button')){
-      if(!window.matchMedia('(max-width:760px)').matches)setMobileMenu(false);
-    }
-  });
+  // Form focus must never trigger navigation, rerendering or scroll changes.
 }
 
 function runFormsQaAudit(){
