@@ -1,7 +1,7 @@
-import {bootstrapGalaxyCue} from '../../shared/js/core/bootstrap.js?v=10302';
-import {ensureWorkflow,getWorkflowState,allowedActions,transitionWorkflow,reconcileWorkflow,workflowProgress,ACTION_LABELS,WORKFLOW_STATES} from '../../shared/js/core/workflow.js?v=10302';
+import {bootstrapGalaxyCue} from '../../shared/js/core/bootstrap.js?v=10301';
+import {ensureWorkflow,getWorkflowState,allowedActions,transitionWorkflow,reconcileWorkflow,workflowProgress,ACTION_LABELS,WORKFLOW_STATES} from '../../shared/js/core/workflow.js?v=10301';
 const galaxyCueRuntime=bootstrapGalaxyCue();
-import {modules,weddingForm,corporateForm,privateForm,quoteForm,contractForm,weddingPlannerForm,corporatePlannerForm,privatePlannerForm,timelineForm,uploadsView,messagesView} from '../../shared/js/modules.js?v=10302';
+import {modules,weddingForm,corporateForm,privateForm,quoteForm,contractForm,weddingPlannerForm,corporatePlannerForm,privatePlannerForm,timelineForm,uploadsView,messagesView} from '../../shared/js/modules.js?v=10301';
 let supabase=null;
 let getCurrentUser=async()=>null;
 let restoreAuthSession=async()=>({user:null,error:null,handled:false});
@@ -362,7 +362,7 @@ async function runAutoCloudSync({notify=false}={}){
 
 
 
-// ---- Unified event workflow bridge (v10.3.3) ----
+// ---- Unified event workflow bridge (v10.3.1) ----
 function eventCoreFromState(){
   state.eventCore=state.eventCore||{};
   const d=activeConsultation();
@@ -509,29 +509,6 @@ function syncPaymentSummaryToWorkspace(invoice){
   contract.depositStatus=verified>0?'Received':'Not received';
   contract.balanceRemaining=(invoiceBalance(invoice)/100).toFixed(2);
   state.forms.contract=contract;
-}
-
-let stableDraftPersistTimer=null;
-function scheduleStableDraftPersist(){
-  clearTimeout(stableDraftPersistTimer);
-  stableDraftPersistTimer=setTimeout(()=>{
-    const scrollX=window.scrollX;
-    const scrollY=window.scrollY;
-    const active=document.activeElement;
-    const selector=active&&active.matches?.('[name]')?`[name="${CSS.escape(active.name)}"]`:null;
-    synchronizeEntireWorkflow();
-    state.updated=new Date().toISOString();
-    localStorage.setItem(KEY,JSON.stringify(state));
-    if(currentUser&&activeBusinessId())queueAutoCloudSync({immediate:false,notify:false});
-    else upsertLocalEvent(state);
-    requestAnimationFrame(()=>{
-      window.scrollTo(scrollX,scrollY);
-      if(selector){
-        const replacement=document.querySelector(`#module ${selector}`);
-        if(replacement&&document.activeElement!==replacement)replacement.focus({preventScroll:true});
-      }
-    });
-  },700);
 }
 
 function save(show=true){
@@ -2431,10 +2408,30 @@ function workspaceClient(){
   const d=activeConsultation(),q=state.forms.quote||{};
   return findMatchingClient({email:d.email||q.clientEmail||event?.client_email||'',name:d.primaryClient||d.company||q.clientName||event?.client_name||''});
 }
-function workspaceClientCard(){
-  const client=workspaceClient();
-  if(!client)return '';
-  return `<section class="workspace-client-section"><div class="section-title"><div><small>Client</small><h2>Client Profile</h2></div></div><div class="unified-client-card-host">${renderUnifiedClientCard(client)}</div></section>`;
+function workspaceClientLinker(){
+  const linked=workspaceClient();
+  const options=(crmClients||[]).slice().sort((a,b)=>String(a.name||a.company||'').localeCompare(String(b.name||b.company||''))).map(client=>`<option value="${escapeHtml(client.id)}" ${linked?.id===client.id?'selected':''}>${escapeHtml(client.name||client.company||client.email||'Unnamed client')}</option>`).join('');
+  return `<section class="workspace-client-linker"><div><small>Client connected to this form</small><strong>${escapeHtml(linked?.name||linked?.company||'No client selected')}</strong></div><label><span class="sr-only">Select client</span><select id="workspaceClientSelect"><option value="">Select a client…</option>${options}</select></label>${linked?`<button class="btn" type="button" data-open-linked-client="${escapeHtml(linked.id)}">Open Client</button>`:''}</section>`;
+}
+function bindWorkspaceClientLinker(){
+  const select=document.querySelector('#workspaceClientSelect');
+  if(select)select.addEventListener('change',()=>{
+    const client=(crmClients||[]).find(item=>item.id===select.value)||null;
+    state.eventCore=state.eventCore||{};
+    state.eventCore.clientId=client?.id||'';
+    state.eventCore.clientName=client?.name||client?.company||'';
+    state.eventCore.clientEmail=client?.email||'';
+    state.eventCore.clientPhone=client?.phone||'';
+    const current=(cloudBookings||[]).find(row=>row.booking_ref===state.bookingId)||loadLocalEvents().find(row=>row.booking_ref===state.bookingId);
+    if(current){
+      const rows=loadLocalEvents().map(row=>row.booking_ref===state.bookingId?{...row,client_id:client?.id||null,client_name:client?.name||client?.company||'',client_email:client?.email||'',updated_at:new Date().toISOString()}:row);
+      saveLocalEvents(rows);cloudBookings=rows;
+    }
+    persistStateSnapshot();
+    renderMain();
+    toast(client?'Client connected to this form':'Client connection removed');
+  });
+  document.querySelectorAll('[data-open-linked-client]').forEach(button=>button.addEventListener('click',()=>{selectedClientId=button.dataset.openLinkedClient;appView='clients';shell();}));
 }
 
 function workspaceOverview(){
@@ -2449,6 +2446,18 @@ function workspaceOverview(){
     <div><small>Contract</small><strong>${escapeHtml(c.contractStatus||'Draft')}</strong></div>
   </div>`;
 }
+function persistStateSnapshot(){
+  state.updated=new Date().toISOString();
+  localStorage.setItem(KEY,JSON.stringify(state));
+  const chip=document.querySelector('.autosave-chip');
+  if(chip){chip.textContent='● Saved locally';chip.dataset.state='saved';}
+}
+function persistActiveFormDraft(form,moduleId){
+  if(!form||!moduleId)return;
+  state.forms[moduleId]=dataFrom(form);
+  persistStateSnapshot();
+}
+
 function renderMain(){
   const m=modules.find(x=>x.id===state.active)||modules[0];
   const main=document.querySelector('#main');
@@ -2457,8 +2466,8 @@ function renderMain(){
   const overview=workspaceOverview();
   const workflowOverview=workflowStatusCard('organization');
   const context=['wedding','corporate','private'].includes(state.active)?'consultation':['wedding-planner','corporate-planner','private-planner'].includes(state.active)?'planning':null;
-  const unifiedClient=context?workspaceClientCard():'';
-  main.innerHTML=`<section class="hero workspace-hero"><div><button class="text-button back-dashboard" data-view="${context==='planning'?'planning':context==='consultation'?'consultations':'dashboard'}">← Back</button><div class="eyebrow">Current Event · ${state.bookingId}</div><h1>${m.label}</h1><p>${m.description} ${currentUser?'Changes save and sync automatically while you are signed in.':'Changes save automatically in this browser.'}</p></div></section>${overview}${workflowOverview}${unifiedClient}<div class="booking-strip"><div class="ref"><small>Event Reference</small><br><strong>${state.bookingId}</strong></div><div class="actions"><span class="autosave-chip">● Saved locally</span><button class="btn" data-action="save">Save Now</button><button class="btn primary" data-action="cloud-sync">${currentUser?'Sync Now':'Sign in to Sync'}</button></div></div><div id="module"></div><div class="footer-note">Galaxy Cue · Entertainment Company Operating System</div>`;
+  const clientLinker=context?workspaceClientLinker():'';
+  main.innerHTML=`<section class="hero workspace-hero"><div><button class="text-button back-dashboard" data-view="${context==='planning'?'planning':context==='consultation'?'consultations':'dashboard'}">← Back</button><div class="eyebrow">Current Event · ${state.bookingId}</div><h1>${m.label}</h1><p>${m.description} ${currentUser?'Draft changes save locally while you type. Use Save Now or Sync Now to update the workflow and cloud.':'Draft changes save locally while you type.'}</p></div></section>${overview}${workflowOverview}${clientLinker}<div class="booking-strip"><div class="ref"><small>Event Reference</small><br><strong>${state.bookingId}</strong></div><div class="actions"><span class="autosave-chip">● Saved locally</span><button class="btn" data-action="save">Save Now</button><button class="btn primary" data-action="cloud-sync">${currentUser?'Sync Now':'Sign in to Sync'}</button></div></div><div id="module"></div><div class="footer-note">Galaxy Cue · Entertainment Company Operating System</div>`;
   const host=document.querySelector('#module'),source=activeConsultation();
   host.className=`module-host module-${state.active}`;host.dataset.module=state.active;
   if(state.active==='wedding')host.innerHTML=weddingForm();
@@ -2478,24 +2487,16 @@ function renderMain(){
   if(state.active==='timeline')renderTimelineRows();if(state.active==='uploads')renderUploads();if(state.active==='messages')renderMessages();
   const form=host.querySelector('form');
   if(form){
-    const saved={...(state.forms[state.active]||{}),...(state.forms[`template-${context}`]||{})};fill(form,saved);
     const moduleId=state.active;
-    document.querySelectorAll('.dynamic-template-panel input').forEach(input=>{if(Array.isArray(saved[input.name]))input.checked=saved[input.name].includes(input.value);else input.checked=saved[input.name]===true||String(saved[input.name])===String(input.value);input.addEventListener('change',()=>{const templateForm=document.querySelector('.dynamic-template-panel');if(!templateForm)return;state.forms[`template-${context}`]=dataFrom(templateForm);scheduleStableDraftPersist();});});
-    const captureDraft=()=>{
-      // Keep the active DOM untouched while the user is typing.
-      // Workflow reconciliation and cloud propagation run only on explicit save/submit.
-      state.forms[moduleId]=dataFrom(form);
-      state.updated=new Date().toISOString();
-      localStorage.setItem(KEY,JSON.stringify(state));
-      if(moduleId==='quote')updateQuoteTotals();
-      if(moduleId==='contract')updateContractTotals();
-    };
-    form.addEventListener('input',captureDraft);
-    form.addEventListener('change',captureDraft);
-    form.addEventListener('submit',e=>{e.preventDefault();if(!form.reportValidity())return;state.forms[moduleId]=dataFrom(form);if(!state.completed.includes(moduleId))state.completed.push(moduleId);save();toast('Workspace completed');renderMain()});
-    if(state.active==='quote')updateQuoteTotals();if(state.active==='contract')updateContractTotals();
+    const saved={...(state.forms[moduleId]||{}),...(state.forms[`template-${context}`]||{})};fill(form,saved);
+    document.querySelectorAll('.dynamic-template-panel input').forEach(input=>{if(Array.isArray(saved[input.name]))input.checked=saved[input.name].includes(input.value);else input.checked=saved[input.name]===true||String(saved[input.name])===String(input.value);input.addEventListener('change',()=>{const templateForm=document.querySelector('.dynamic-template-panel');if(!templateForm)return;state.forms[`template-${context}`]=dataFrom(templateForm);persistStateSnapshot();});});
+    const saveDraft=()=>{persistActiveFormDraft(form,moduleId);if(moduleId==='quote')updateQuoteTotals();if(moduleId==='contract')updateContractTotals();};
+    form.addEventListener('input',saveDraft);
+    form.addEventListener('change',saveDraft);
+    form.addEventListener('submit',e=>{e.preventDefault();if(!form.reportValidity())return;persistActiveFormDraft(form,moduleId);if(!state.completed.includes(moduleId))state.completed.push(moduleId);save();toast('Workspace completed');renderMain()});
+    if(moduleId==='quote')updateQuoteTotals();if(moduleId==='contract')updateContractTotals();
   }
-  bindActions();bindWorkflowActions();bindNav();if(context)bindClientEditor();
+  bindActions();bindWorkflowActions();bindNav();bindWorkspaceClientLinker();
 }
 function updateQuoteTotals(){const form=document.querySelector('form[data-form="quote"]');if(!form)return;const q=dataFrom(form),t=quoteTotals(q);[['subtotalValue',t.subtotal],['discountValue',-t.discount],['taxValue',t.tax],['totalValue',t.total],['depositValue',t.deposit],['balanceValue',t.balance]].forEach(([id,v])=>{const el=document.getElementById(id);if(el)el.textContent=money(v)})}
 function updateContractTotals(){const t=quoteTotals();document.querySelectorAll('[data-contract-total]').forEach(el=>el.textContent=money(t.total));document.querySelectorAll('[data-contract-deposit]').forEach(el=>el.textContent=money(t.deposit))}
@@ -2525,7 +2526,12 @@ function installWorkspaceInteractionGuards(){
     }
   });
 
-  // Form focus must never trigger navigation, rerendering or scroll changes.
+  // Never leave a stale mobile backdrop over a desktop/workspace form.
+  document.addEventListener('focusin',event=>{
+    if(event.target.matches?.('#main input,#main select,#main textarea,#main button')){
+      if(!window.matchMedia('(max-width:760px)').matches)setMobileMenu(false);
+    }
+  });
 }
 
 function runFormsQaAudit(){
