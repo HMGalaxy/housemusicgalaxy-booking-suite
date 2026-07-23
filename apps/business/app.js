@@ -1,7 +1,7 @@
-import {bootstrapGalaxyCue} from '../../shared/js/core/bootstrap.js?v=10300';
-import {ensureWorkflow,getWorkflowState,allowedActions,transitionWorkflow,reconcileWorkflow,workflowProgress,ACTION_LABELS,WORKFLOW_STATES} from '../../shared/js/core/workflow.js?v=10300';
+import {bootstrapGalaxyCue} from '../../shared/js/core/bootstrap.js?v=10301';
+import {ensureWorkflow,getWorkflowState,allowedActions,transitionWorkflow,reconcileWorkflow,workflowProgress,ACTION_LABELS,WORKFLOW_STATES} from '../../shared/js/core/workflow.js?v=10301';
 const galaxyCueRuntime=bootstrapGalaxyCue();
-import {modules,weddingForm,corporateForm,privateForm,quoteForm,contractForm,weddingPlannerForm,corporatePlannerForm,privatePlannerForm,timelineForm,uploadsView,messagesView} from '../../shared/js/modules.js?v=10300';
+import {modules,weddingForm,corporateForm,privateForm,quoteForm,contractForm,weddingPlannerForm,corporatePlannerForm,privatePlannerForm,timelineForm,uploadsView,messagesView} from '../../shared/js/modules.js?v=10301';
 let supabase=null;
 let getCurrentUser=async()=>null;
 let restoreAuthSession=async()=>({user:null,error:null,handled:false});
@@ -362,7 +362,7 @@ async function runAutoCloudSync({notify=false}={}){
 
 
 
-// ---- Unified event workflow bridge (v10.3.0) ----
+// ---- Unified event workflow bridge (v10.3.1) ----
 function eventCoreFromState(){
   state.eventCore=state.eventCore||{};
   const d=activeConsultation();
@@ -810,7 +810,7 @@ function shell(){document.querySelector('#app').innerHTML=`<div class="crm-shell
 <label><span>Breakdown end *</span><input name="breakdownEndTime" type="time" step="900" required></label>
 <label class="span-2"><span>Venue</span><input name="venueName" placeholder="Venue name or location"></label>
 </div><button class="btn primary full" id="eventModalSubmit" type="submit">Create Event Workspace</button></form></div>`;
-renderAppView();bindNav();bindGlobalActions();installResponsiveNavigationGuards();setMobileMenu(false);}
+renderAppView();bindNav();bindGlobalActions();installResponsiveNavigationGuards();installWorkspaceInteractionGuards();setMobileMenu(false);}
 
 function renderAppView(){
   if(appView==='dashboard')renderDashboard();
@@ -906,7 +906,7 @@ function loadTemplateSettings(){
 }
 function saveTemplateSettings(settings){localStorage.setItem(TEMPLATE_SETTINGS_KEY,JSON.stringify(settings));}
 function templateItemsFor(context){return loadTemplateSettings().items.filter(item=>item.enabled&&item[context]);}
-function renderTemplateCard(item){return `<button class="v9-template-card" data-module="${item.id}"><span class="v9-template-icon">${item.icon}</span><div><small>${item.type}</small><h2>${item.title}</h2><p>${item.description}</p></div><em>Open form →</em></button>`;}
+function renderTemplateCard(item){return `<button type="button" class="v9-template-card" data-module="${item.id}"><span class="v9-template-icon">${item.icon}</span><div><small>${item.type}</small><h2>${item.title}</h2><p>${item.description}</p></div><em>Open form →</em></button>`;}
 function renderConsultationHub(){
   const settings=loadTemplateSettings();
   const items=[
@@ -2471,6 +2471,59 @@ function portal(){const d=activeConsultation(),q=state.forms.quote||{},c=state.f
 function admin(){const d=activeConsultation(),q=state.forms.quote||{},c=state.forms.contract||{},t=quoteTotals(q);return `<div class="card"><h2>Admin Dashboard</h2><p class="card-intro">Local demonstration dashboard for the active browser.</p><div class="summary-grid"><div class="stat"><small>Client</small><strong>${d.primaryClient||q.clientName||'—'}</strong></div><div class="stat"><small>Quote Total</small><strong>${money(t.total)}</strong></div><div class="stat"><small>Deposit Received</small><strong>${money(c.depositPaid)}</strong></div><div class="stat"><small>Quote Status</small><strong style="font-size:17px">${q.quoteStatus||'Draft'}</strong></div><div class="stat"><small>Contract Status</small><strong style="font-size:17px">${c.contractStatus||'Draft'}</strong></div><div class="stat"><small>Last Updated</small><strong style="font-size:14px">${new Date(state.updated).toLocaleString()}</strong></div></div></div><div class="card"><h2>Event Summary</h2><div class="admin-list"><div><span>Event date</span><strong>${d.eventDate||q.eventDate||'—'}</strong></div><div><span>Venue</span><strong>${d.venueName||q.venueName||'—'}</strong></div><div><span>Deposit status</span><strong>${c.depositStatus||'Not requested'}</strong></div><div><span>Remaining balance</span><strong>${money(Math.max(0,t.total-(Number(c.depositPaid)||0)))}</strong></div></div></div>`}
 function comingSoon(m){return `<div class="card empty"><div class="icon">${m.icon}</div><h2>${m.label}</h2><p class="card-intro">The navigation and data structure are prepared. This module is scheduled for the next build.</p><button class="btn primary" data-nav="wedding">Return to Consultation</button></div>`}
 function updateProgress(form){const n=pct(form);document.querySelector('#progressBar').style.width=n+'%';document.querySelector('#progressText').textContent=n+'%'}
+
+function installWorkspaceInteractionGuards(){
+  if(window.__gcWorkspaceInteractionGuardsInstalled)return;
+  window.__gcWorkspaceInteractionGuardsInstalled=true;
+
+  // Delegated routing survives every dynamic hub/form render.
+  document.addEventListener('click',event=>{
+    const moduleTarget=event.target.closest?.('[data-module]');
+    if(moduleTarget){
+      event.preventDefault();
+      navigateToModule(moduleTarget.dataset.module);
+      return;
+    }
+    const navTarget=event.target.closest?.('#module [data-nav], .workflow-item[data-nav]');
+    if(navTarget){
+      event.preventDefault();
+      navigateToModule(navTarget.dataset.nav);
+    }
+  });
+
+  // Never leave a stale mobile backdrop over a desktop/workspace form.
+  document.addEventListener('focusin',event=>{
+    if(event.target.matches?.('#main input,#main select,#main textarea,#main button')){
+      if(!window.matchMedia('(max-width:760px)').matches)setMobileMenu(false);
+    }
+  });
+}
+
+function runFormsQaAudit(){
+  const issues=[];
+  const formModules=['wedding','corporate','private','quote','contract','wedding-planner','corporate-planner','private-planner','timeline'];
+  const originalActive=state.active;
+  const originalView=appView;
+  for(const moduleId of formModules){
+    state.active=moduleId;
+    appView='workspace';
+    renderMain();
+    const form=document.querySelector('#module form');
+    if(!form){issues.push(`${moduleId}: form missing`);continue;}
+    const controls=[...form.querySelectorAll('input,select,textarea,button')];
+    if(!controls.length)issues.push(`${moduleId}: no controls`);
+    controls.forEach(control=>{
+      const style=getComputedStyle(control);
+      if(style.pointerEvents==='none')issues.push(`${moduleId}: ${control.name||control.type||control.tagName} blocks pointer events`);
+      if(control.matches('input,select,textarea')&&(control.disabled||control.readOnly))issues.push(`${moduleId}: ${control.name||control.tagName} is disabled/read-only`);
+    });
+  }
+  state.active=originalActive;
+  appView=originalView;
+  shell();
+  return {passed:issues.length===0,checkedAt:new Date().toISOString(),issues};
+}
+
 function bindNav(){
   document.querySelectorAll('[data-view]').forEach(button=>{
     button.addEventListener('click',event=>{

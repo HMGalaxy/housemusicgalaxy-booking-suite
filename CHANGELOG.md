@@ -1,3 +1,13 @@
+# Galaxy Cue v10.3.1
+
+## Forms Interaction QA Hotfix
+
+- Added delegated navigation for all Consultation and Event Planning template cards.
+- Added interaction guards so dynamically rendered forms remain clickable and editable.
+- Added stale mobile-backdrop protection.
+- Added runtime `runFormsQaAudit()` covering Wedding, Corporate, Private, Quote, Contract, all Planning forms, and Timeline.
+- Updated visible version box and cache references to v10.3.1 / 10301.
+
 # Galaxy Cue Changelog
 
 ## v10.3.0 — Connected Workflow Runtime
