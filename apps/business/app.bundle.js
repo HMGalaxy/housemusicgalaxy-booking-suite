@@ -362,7 +362,7 @@ async function runAutoCloudSync({notify=false}={}){
 
 
 
-// ---- Unified event workflow bridge (v10.3.2) ----
+// ---- Unified event workflow bridge (v10.3.3) ----
 function eventCoreFromState(){
   state.eventCore=state.eventCore||{};
   const d=activeConsultation();
@@ -2482,12 +2482,13 @@ function renderMain(){
     const moduleId=state.active;
     document.querySelectorAll('.dynamic-template-panel input').forEach(input=>{if(Array.isArray(saved[input.name]))input.checked=saved[input.name].includes(input.value);else input.checked=saved[input.name]===true||String(saved[input.name])===String(input.value);input.addEventListener('change',()=>{const templateForm=document.querySelector('.dynamic-template-panel');if(!templateForm)return;state.forms[`template-${context}`]=dataFrom(templateForm);scheduleStableDraftPersist();});});
     const captureDraft=()=>{
+      // Keep the active DOM untouched while the user is typing.
+      // Workflow reconciliation and cloud propagation run only on explicit save/submit.
       state.forms[moduleId]=dataFrom(form);
       state.updated=new Date().toISOString();
       localStorage.setItem(KEY,JSON.stringify(state));
       if(moduleId==='quote')updateQuoteTotals();
       if(moduleId==='contract')updateContractTotals();
-      scheduleStableDraftPersist();
     };
     form.addEventListener('input',captureDraft);
     form.addEventListener('change',captureDraft);
