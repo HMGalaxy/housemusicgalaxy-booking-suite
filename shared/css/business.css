@@ -1329,8 +1329,14 @@ button,input,select,textarea,option,optgroup{
 .unified-client-card-host>.client-editor{width:100%;box-sizing:border-box}
 .workspace-client-section .v8-client-profile{margin:0}
 
-/* Galaxy Cue v10.3.2 — form interaction QA guard */
+/* Galaxy Cue v10.3.1 — form interaction QA guard */
 #main input,#main select,#main textarea,#main button,#main label,.v9-template-card{pointer-events:auto!important;}
 #main form,#module,.module-host,.workspace-module{position:relative;z-index:1;}
 body:not(.mobile-nav-open) .mobile-nav-backdrop{pointer-events:none!important;opacity:0!important;}
 .v9-template-card{cursor:pointer;}
+
+
+/* v10.3.4 form engine repair: compact event-client binding, no embedded client card */
+.workspace-client-linker{display:grid;grid-template-columns:minmax(180px,1fr) minmax(220px,360px) auto;gap:14px;align-items:end;margin:18px 0;padding:16px 18px;border:1px solid var(--border,#3a332d);border-radius:16px;background:var(--panel,#151311)}
+.workspace-client-linker>div{display:grid;gap:4px}.workspace-client-linker small{opacity:.68;text-transform:uppercase;letter-spacing:.08em;font-size:11px}.workspace-client-linker strong{font-size:16px}.workspace-client-linker label{margin:0}.workspace-client-linker select{width:100%}.sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+@media(max-width:760px){.workspace-client-linker{grid-template-columns:1fr}.workspace-client-linker .btn{width:100%}}

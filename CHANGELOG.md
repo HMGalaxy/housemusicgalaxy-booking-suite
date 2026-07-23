@@ -1,12 +1,6 @@
+Galaxy Cue v10.3.4 — Form Engine Repair
 
-## v10.3.2 — Stable Form Input
-- Removed full workflow persistence from every keystroke.
-- Added in-memory draft capture with debounced persistence.
-- Preserves focus and scroll position during background saves.
-- Captures the active module ID when binding each form so data cannot be written into another form after navigation.
-- Removed the workspace focus handler that could interfere with active inputs.
-- Updated runtime version and cache key to 10.3.2 / 10302.
-# Galaxy Cue v10.3.2
+# Galaxy Cue v10.3.1
 
 ## Forms Interaction QA Hotfix
 
@@ -14,7 +8,7 @@
 - Added interaction guards so dynamically rendered forms remain clickable and editable.
 - Added stale mobile-backdrop protection.
 - Added runtime `runFormsQaAudit()` covering Wedding, Corporate, Private, Quote, Contract, all Planning forms, and Timeline.
-- Updated visible version box and cache references to v10.3.2 / 10302.
+- Updated visible version box and cache references to v10.3.1 / 10301.
 
 # Galaxy Cue Changelog
 
