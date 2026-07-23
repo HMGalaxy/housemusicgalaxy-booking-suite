@@ -362,7 +362,7 @@ async function runAutoCloudSync({notify=false}={}){
 
 
 
-// ---- Unified event workflow bridge (v10.3.1) ----
+// ---- Unified event workflow bridge (v10.3.5) ----
 function eventCoreFromState(){
   state.eventCore=state.eventCore||{};
   const d=activeConsultation();
@@ -2411,9 +2411,15 @@ function workspaceClient(){
 function workspaceClientLinker(){
   const linked=workspaceClient();
   const options=(crmClients||[]).slice().sort((a,b)=>String(a.name||a.company||'').localeCompare(String(b.name||b.company||''))).map(client=>`<option value="${escapeHtml(client.id)}" ${linked?.id===client.id?'selected':''}>${escapeHtml(client.name||client.company||client.email||'Unnamed client')}</option>`).join('');
-  return `<section class="workspace-client-linker"><div><small>Client connected to this form</small><strong>${escapeHtml(linked?.name||linked?.company||'No client selected')}</strong></div><label><span class="sr-only">Select client</span><select id="workspaceClientSelect"><option value="">Select a client…</option>${options}</select></label>${linked?`<button class="btn" type="button" data-open-linked-client="${escapeHtml(linked.id)}">Open Client</button>`:''}</section>`;
+  if(linked){
+    return `<section class="workspace-client-linker is-linked"><div class="workspace-client-summary"><small>Client connected to this event</small><strong>${escapeHtml(linked.name||linked.company||'Connected client')}</strong><span>${escapeHtml(linked.email||linked.phone||'Client record linked')}</span></div><div class="workspace-client-actions"><button class="btn" type="button" data-open-linked-client="${escapeHtml(linked.id)}">Open Client</button><button class="btn" type="button" data-change-workspace-client>Change Client</button></div><label class="workspace-client-select-wrap" hidden><span>Select another client</span><select id="workspaceClientSelect"><option value="">Remove client connection</option>${options}</select></label></section>`;
+  }
+  return `<section class="workspace-client-linker"><div class="workspace-client-summary"><small>Client connection</small><strong>No client selected</strong><span>Connect the event before sending this form.</span></div><label class="workspace-client-select-wrap"><span>Select client</span><select id="workspaceClientSelect"><option value="">Select a client…</option>${options}</select></label></section>`;
 }
 function bindWorkspaceClientLinker(){
+  const changeButton=document.querySelector('[data-change-workspace-client]');
+  const selectWrap=document.querySelector('.workspace-client-select-wrap');
+  if(changeButton&&selectWrap)changeButton.addEventListener('click',()=>{selectWrap.hidden=!selectWrap.hidden;if(!selectWrap.hidden)selectWrap.querySelector('select')?.focus();});
   const select=document.querySelector('#workspaceClientSelect');
   if(select)select.addEventListener('change',()=>{
     const client=(crmClients||[]).find(item=>item.id===select.value)||null;
@@ -2513,7 +2519,11 @@ function installWorkspaceInteractionGuards(){
 
   // Delegated routing survives every dynamic hub/form render.
   document.addEventListener('click',event=>{
-    const moduleTarget=event.target.closest?.('[data-module]');
+    // Route only from explicit navigation controls. The module host itself also
+    // carries data-module, so using closest('[data-module]') caused every click
+    // inside a form field to navigate back to the same module, rebuild the DOM,
+    // clear focus and scroll to the top.
+    const moduleTarget=event.target.closest?.('button[data-module],a[data-module],[role="button"][data-module]');
     if(moduleTarget){
       event.preventDefault();
       navigateToModule(moduleTarget.dataset.module);
