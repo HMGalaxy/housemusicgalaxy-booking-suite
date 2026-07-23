@@ -1328,3 +1328,9 @@ button,input,select,textarea,option,optgroup{
 .unified-client-card-host,.unified-client-card,.workspace-client-section{width:100%;max-width:none;box-sizing:border-box}
 .unified-client-card-host>.client-editor{width:100%;box-sizing:border-box}
 .workspace-client-section .v8-client-profile{margin:0}
+
+/* Galaxy Cue v10.3.1 — form interaction QA guard */
+#main input,#main select,#main textarea,#main button,#main label,.v9-template-card{pointer-events:auto!important;}
+#main form,#module,.module-host,.workspace-module{position:relative;z-index:1;}
+body:not(.mobile-nav-open) .mobile-nav-backdrop{pointer-events:none!important;opacity:0!important;}
+.v9-template-card{cursor:pointer;}
