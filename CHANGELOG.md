@@ -1,6 +1,6 @@
 Galaxy Cue v10.3.4 — Form Engine Repair
 
-# Galaxy Cue v10.3.1
+# Galaxy Cue v10.3.5
 
 ## Forms Interaction QA Hotfix
 
@@ -8,7 +8,7 @@ Galaxy Cue v10.3.4 — Form Engine Repair
 - Added interaction guards so dynamically rendered forms remain clickable and editable.
 - Added stale mobile-backdrop protection.
 - Added runtime `runFormsQaAudit()` covering Wedding, Corporate, Private, Quote, Contract, all Planning forms, and Timeline.
-- Updated visible version box and cache references to v10.3.1 / 10301.
+- Updated visible version box and cache references to v10.3.5 / 10305.
 
 # Galaxy Cue Changelog
 
