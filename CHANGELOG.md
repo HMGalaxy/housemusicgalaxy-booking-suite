@@ -1,3 +1,17 @@
+# Galaxy Cue v10.4.0
+
+- Removed the form-host `data-module` collision that caused field clicks to navigate and rebuild the workspace.
+- Standardized completed client submissions on `documents.eventWorkbook`, while preserving legacy `eventForm` reads.
+- Made Create Quote the primary Business action after a Full Event Workbook is submitted.
+- Added client-facing form filtering for `data-business-only`, `business_*`, and `internal_*` fields.
+- Updated the Client workflow display to the approved seven-stage Business ↔ Client lifecycle.
+- Connected the Business Quote Library to the existing Supabase `quotes` table.
+- Added the v10.4.0 Supabase workbook normalization and workflow migration.
+- Restricted the workbook RPC to authenticated users and the service role.
+- Updated Business and Client runtime/cache references to v10.4.0.
+
+## Previous recovery releases
+
 Galaxy Cue v10.3.4 — Form Engine Repair
 
 # Galaxy Cue v10.3.5

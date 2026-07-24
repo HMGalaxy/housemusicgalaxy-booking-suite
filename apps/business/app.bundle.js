@@ -1,7 +1,7 @@
-import {bootstrapGalaxyCue} from '../../shared/js/core/bootstrap.js?v=10301';
-import {ensureWorkflow,getWorkflowState,allowedActions,transitionWorkflow,reconcileWorkflow,workflowProgress,ACTION_LABELS,WORKFLOW_STATES} from '../../shared/js/core/workflow.js?v=10301';
+import {bootstrapGalaxyCue} from '../../shared/js/core/bootstrap.js?v=10400';
+import {ensureWorkflow,getWorkflowState,allowedActions,transitionWorkflow,reconcileWorkflow,workflowProgress,ACTION_LABELS,WORKFLOW_STATES} from '../../shared/js/core/workflow.js?v=10400';
 const galaxyCueRuntime=bootstrapGalaxyCue();
-import {modules,weddingForm,corporateForm,privateForm,quoteForm,contractForm,weddingPlannerForm,corporatePlannerForm,privatePlannerForm,timelineForm,uploadsView,messagesView} from '../../shared/js/modules.js?v=10301';
+import {modules,weddingForm,corporateForm,privateForm,quoteForm,contractForm,weddingPlannerForm,corporatePlannerForm,privatePlannerForm,timelineForm,uploadsView,messagesView} from '../../shared/js/modules.js?v=10400';
 let supabase=null;
 let getCurrentUser=async()=>null;
 let restoreAuthSession=async()=>({user:null,error:null,handled:false});
@@ -29,6 +29,8 @@ let submitBookingRequest=async()=>({data:null,error:new Error('Cloud connection 
 let listBookingRequests=async()=>({data:[],error:new Error('Cloud connection is not ready.')});
 let updateBookingRequest=async()=>({data:null,error:new Error('Cloud connection is not ready.')});
 let acceptBookingRequest=async()=>({data:null,error:new Error('Cloud connection is not ready.')});
+let listCloudQuotes=async()=>({data:[],error:new Error('Cloud connection is not ready.')});
+let saveCloudQuote=async()=>({data:null,error:new Error('Cloud connection is not ready.')});
 
 let activeBusiness=null;
 let cloudModuleLoaded=false;
@@ -63,6 +65,8 @@ async function loadCloudModule(){
     listBookingRequests=api.listBookingRequests;
     updateBookingRequest=api.updateBookingRequest;
     acceptBookingRequest=api.acceptBookingRequest;
+    listCloudQuotes=api.listCloudQuotes;
+    saveCloudQuote=api.saveCloudQuote;
     cloudModuleLoaded=true;
     return true;
   }catch(error){
@@ -217,7 +221,7 @@ async function refreshEventsFromCloud(){
 }
 async function refreshCoreCloudData(){
   if(!currentUser||!activeBusinessId())return;
-  await Promise.all([refreshClientsFromCloud(),refreshEventsFromCloud()]);
+  await Promise.all([refreshClientsFromCloud(),refreshEventsFromCloud(),refreshQuotesFromCloud()]);
 }
 function findClientForState(){
   const d=activeConsultation(),q=state.forms?.quote||{};
@@ -259,6 +263,13 @@ function loadLocalRows(key){try{return JSON.parse(localStorage.getItem(key)||'[]
 function saveLocalRows(key,rows){localStorage.setItem(key,JSON.stringify(rows))}
 let crmQuotes=loadLocalRows(QUOTES_KEY);
 let crmContracts=loadLocalRows(CONTRACTS_KEY);
+async function refreshQuotesFromCloud(){
+  if(!currentUser||!activeBusinessId())return;
+  const {data,error}=await listCloudQuotes(activeBusinessId());
+  if(error){console.warn('Could not load cloud quotes:',error);return;}
+  crmQuotes=data||[];
+  saveLocalRows(QUOTES_KEY,crmQuotes);
+}
 
 const INVOICES_KEY='galaxy_cue_invoices_v19';
 const PAYMENTS_KEY='galaxy_cue_payments_v19';
@@ -362,7 +373,7 @@ async function runAutoCloudSync({notify=false}={}){
 
 
 
-// ---- Unified event workflow bridge (v10.3.5) ----
+// ---- Unified event workflow bridge ----
 function eventCoreFromState(){
   state.eventCore=state.eventCore||{};
   const d=activeConsultation();
@@ -1475,7 +1486,7 @@ function renderQuotes(){
   main.innerHTML=`<section class="dash-hero compact-hero"><div><div class="eyebrow">Sales Documents</div><h1>Quotes</h1><p>Create clear pricing proposals and convert accepted quotes into contracts.</p></div><div class="hero-actions"><button class="btn primary" data-action="new-quote">＋ New Quote</button></div></section>
   <div class="crm-controls"><div class="search-box">⌕<input id="quoteSearch" value="${escapeHtml(quoteSearch)}" placeholder="Search quote, client, event or status"></div><div class="calendar-count">${filtered.length} quote${filtered.length===1?'':'s'}</div></div>
   <div class="crm-split">
-    <section class="booking-list-panel"><div class="list-panel-head"><strong>Quote Library</strong><small>Local draft records</small></div>
+    <section class="booking-list-panel"><div class="list-panel-head"><strong>Quote Library</strong><small>${currentUser?'Cloud records':'Local draft records'}</small></div>
       <div class="booking-card-list">${filtered.length?filtered.map(q=>quoteCard(q,selectedQuoteId)).join(''):'<div class="empty-state"><strong>No quotes yet.</strong><br>Create your first pricing proposal.</div>'}</div>
     </section>
     <aside class="booking-preview-panel">${selected?quotePreview(selected):quoteEditor()}</aside>
@@ -1528,7 +1539,7 @@ function bindQuoteEditor(){
   const add=form.querySelector('[data-add-quote-item]');
   if(add)add.addEventListener('click',()=>{const q=formToQuote(form);q.items.push({description:'',quantity:1,unitPriceCents:0});document.querySelector('.booking-preview-panel').innerHTML=quoteEditor(q);bindQuoteEditor()});
   form.querySelectorAll('[data-remove-quote-item]').forEach(b=>b.addEventListener('click',()=>{const q=formToQuote(form);q.items.splice(Number(b.dataset.removeQuoteItem),1);document.querySelector('.booking-preview-panel').innerHTML=quoteEditor(q);bindQuoteEditor()}));
-  form.addEventListener('submit',e=>{e.preventDefault();const q=formToQuote(form);q.id=q.id||crypto.randomUUID();q.createdAt=q.createdAt||new Date().toISOString();q.updatedAt=new Date().toISOString();crmQuotes=crmQuotes.some(x=>x.id===q.id)?crmQuotes.map(x=>x.id===q.id?q:x):[q,...crmQuotes];saveLocalRows(QUOTES_KEY,crmQuotes);mirrorQuoteRecordToWorkspace(q);persistWorkflowMutation();selectedQuoteId=q.id;renderQuotes();toast('Quote saved and connected to event')});
+  form.addEventListener('submit',async e=>{e.preventDefault();const q=formToQuote(form);q.id=q.id||crypto.randomUUID();q.createdAt=q.createdAt||new Date().toISOString();q.updatedAt=new Date().toISOString();if(currentUser){const {data,error}=await saveCloudQuote(q,activeBusinessId());if(error)return toast(`Quote could not sync: ${error.message}`);q.id=data.id;q.cloud=true;}crmQuotes=crmQuotes.some(x=>x.id===q.id)?crmQuotes.map(x=>x.id===q.id?q:x):[q,...crmQuotes];saveLocalRows(QUOTES_KEY,crmQuotes);mirrorQuoteRecordToWorkspace(q);persistWorkflowMutation();selectedQuoteId=q.id;renderQuotes();toast(currentUser?'Quote saved to the event and cloud':'Quote saved and connected to event')});
 }
 function formToQuote(form){
   const fd=new FormData(form),items=[];
@@ -2274,7 +2285,10 @@ function bookingCard(b,selectedRef){
     <div class="booking-card-venue">${escapeHtml(b.venue_name||'Venue not set')}</div>
   </button>`;
 }
-function eventClientSubmission(event){return event?.event_data?.documents?.eventForm||event?.booking_data?.documents?.eventForm||null}
+function eventClientSubmission(event){
+  const data=event?.event_data||event?.booking_data||{};
+  return data?.documents?.eventWorkbook||data?.documents?.eventForm||null;
+}
 function eventBookingRequestCopy(event){
   const data=event?.event_data||event?.booking_data||{};
   return data?.documents?.bookingRequest||data?.forms?.[data.active||'wedding']||{};
@@ -2289,7 +2303,7 @@ function openBusinessEventDocument(ref,type='event'){
   const submission=eventClientSubmission(event);
   const title=type==='booking'?'Booking Request':'Full Event Workbook';
   const payload=type==='booking'?eventBookingRequestCopy(event):submission?.payload;
-  if(type==='event'&&!submission)return toast('The client has not submitted the Event Booking Form yet.');
+  if(type==='event'&&!submission)return toast('The client has not submitted the Full Event Workbook yet.');
   const modal=document.createElement('div');modal.className='modal';modal.innerHTML=`<div class="modal-panel lead-review-panel"><button class="modal-close" data-close-event-document aria-label="Close">×</button><div class="eyebrow">Event Document</div><h2>${escapeHtml(title)}</h2><p>${type==='event'&&submission?.submittedAt?`Submitted ${new Date(submission.submittedAt).toLocaleString()}`:'Read-only event copy'}</p><div class="business-document-copy">${businessDocumentRows(payload||{})}</div><div class="lead-actions"><button class="btn" data-print-event-document>Print / Save PDF</button><button class="btn primary" data-close-event-document>Done</button></div></div>`;
   document.body.appendChild(modal);const close=()=>modal.remove();modal.querySelectorAll('[data-close-event-document]').forEach(b=>b.onclick=close);modal.querySelector('[data-print-event-document]').onclick=()=>window.print();modal.addEventListener('click',e=>{if(e.target===modal)close()});
 }
@@ -2308,10 +2322,13 @@ function bookingPreview(event){
       <div><small>Reference</small><strong>${escapeHtml(event.booking_ref)}</strong></div>
     </div>
     <div class="preview-progress"><div><span>Event readiness</span><strong>${bookingReadiness(event)}%</strong></div><div class="mini-progress"><span style="width:${bookingReadiness(event)}%"></span></div></div>
-    <button class="btn primary full" data-create-event-quote="${event.booking_ref}">Create / Send Quote</button>
-    <button class="btn full preview-secondary" data-view-event-document="${event.booking_ref}" ${eventClientSubmission(event)?'':'disabled'}>${eventClientSubmission(event)?'Review Full Event Workbook':'Event Workbook Pending'}</button>
+    ${eventClientSubmission(event)
+      ? `<button class="btn primary full" data-create-event-quote="${event.booking_ref}">Create Quote</button>
+         <button class="btn full preview-secondary" data-view-event-document="${event.booking_ref}">Review Full Event Workbook</button>`
+      : `<button class="btn primary full" data-open-booking="${event.booking_ref}">Open Event Workspace</button>
+         <button class="btn full preview-secondary" disabled>Event Workbook Pending</button>`}
     <button class="btn full preview-secondary" data-view-booking-document="${event.booking_ref}">View Booking Request Copy</button>
-    <button class="btn full preview-secondary" data-open-booking="${event.booking_ref}">Open Event Workspace</button><button class="btn full preview-secondary" data-edit-booking="${event.booking_ref}">Edit Schedule / Client</button>
+    ${eventClientSubmission(event)?`<button class="btn full preview-secondary" data-open-booking="${event.booking_ref}">Open Event Workspace</button>`:''}<button class="btn full preview-secondary" data-edit-booking="${event.booking_ref}">Edit Schedule / Client</button>
     ${linkedClient?`<button class="btn full preview-secondary" data-open-client="${linkedClient.id}">Open Client Profile</button>`:''}
     <button class="btn full preview-secondary" data-action="copy-reference" data-reference="${event.booking_ref}">Copy Event Reference</button>
     <button class="btn full danger-button" data-delete-booking="${event.booking_ref}">Delete Event</button>`;
@@ -2475,7 +2492,8 @@ function renderMain(){
   const clientLinker=context?workspaceClientLinker():'';
   main.innerHTML=`<section class="hero workspace-hero"><div><button class="text-button back-dashboard" data-view="${context==='planning'?'planning':context==='consultation'?'consultations':'dashboard'}">← Back</button><div class="eyebrow">Current Event · ${state.bookingId}</div><h1>${m.label}</h1><p>${m.description} ${currentUser?'Draft changes save locally while you type. Use Save Now or Sync Now to update the workflow and cloud.':'Draft changes save locally while you type.'}</p></div></section>${overview}${workflowOverview}${clientLinker}<div class="booking-strip"><div class="ref"><small>Event Reference</small><br><strong>${state.bookingId}</strong></div><div class="actions"><span class="autosave-chip">● Saved locally</span><button class="btn" data-action="save">Save Now</button><button class="btn primary" data-action="cloud-sync">${currentUser?'Sync Now':'Sign in to Sync'}</button></div></div><div id="module"></div><div class="footer-note">Galaxy Cue · Entertainment Company Operating System</div>`;
   const host=document.querySelector('#module'),source=activeConsultation();
-  host.className=`module-host module-${state.active}`;host.dataset.module=state.active;
+  host.className=`module-host module-${state.active}`;
+  host.dataset.workspaceModule=state.active;
   if(state.active==='wedding')host.innerHTML=weddingForm();
   else if(state.active==='corporate')host.innerHTML=corporateForm();
   else if(state.active==='private')host.innerHTML=privateForm();
@@ -2577,7 +2595,7 @@ function bindNav(){
     });
   });
 
-  document.querySelectorAll('[data-module]').forEach(button=>{
+  document.querySelectorAll('button[data-module],a[data-module],[role="button"][data-module]').forEach(button=>{
     button.addEventListener('click',event=>{
       event.preventDefault();
       navigateToModule(button.dataset.module);
@@ -2933,4 +2951,3 @@ function enforceQuarterHourTimeInputs(root=document){
   });
 }
 document.addEventListener('focusin',event=>{if(event.target?.matches?.('input[type="time"]'))enforceQuarterHourTimeInputs(document)});
-
