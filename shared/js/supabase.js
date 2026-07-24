@@ -349,6 +349,69 @@ export async function removeCloudEvent(bookingRef, businessId) {
   return supabase.from('events').delete().eq('booking_ref', bookingRef).eq('business_id', businessId);
 }
 
+export async function listCloudQuotes(businessId) {
+  if (!businessId) return { data: [], error: new Error('No active business workspace.') };
+  const result = await supabase
+    .from('quotes')
+    .select('*, events(booking_ref,title), clients(name,company,email)')
+    .eq('business_id', businessId)
+    .order('updated_at', { ascending: false });
+  if (result.error) return result;
+  return {
+    data: (result.data || []).map(row => ({
+      ...(row.content || {}),
+      id: row.id,
+      number: row.quote_number,
+      bookingRef: row.events?.booking_ref || row.content?.bookingRef || '',
+      eventRef: row.events?.booking_ref || row.content?.eventRef || '',
+      clientName: row.clients?.name || row.clients?.company || row.content?.clientName || '',
+      eventName: row.events?.title || row.content?.eventName || '',
+      status: String(row.status || 'draft').replace(/(^|_)(\w)/g, (_match, space, letter) => `${space ? ' ' : ''}${letter.toUpperCase()}`),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      cloud: true
+    })),
+    error: null
+  };
+}
+
+export async function saveCloudQuote(quote, businessId) {
+  if (!businessId) return { data: null, error: new Error('No active business workspace.') };
+  const event = await supabase
+    .from('events')
+    .select('id,client_id,booking_ref,title')
+    .eq('business_id', businessId)
+    .eq('booking_ref', quote.eventRef || quote.bookingRef)
+    .maybeSingle();
+  if (event.error) return event;
+  if (!event.data) return { data: null, error: new Error('The quote must be linked to an existing event.') };
+
+  const subtotal = (quote.items || []).reduce(
+    (sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.unitPriceCents) || 0),
+    0
+  ) / 100;
+  const depositDue = subtotal * ((Number(quote.depositPercent) || 0) / 100);
+  const status = String(quote.status || 'draft').trim().toLowerCase();
+  const allowedStatus = ['draft', 'sent', 'viewed', 'accepted', 'declined', 'paid', 'void'].includes(status)
+    ? status
+    : 'draft';
+  const payload = {
+    business_id: businessId,
+    event_id: event.data.id,
+    client_id: event.data.client_id,
+    quote_number: quote.number,
+    status: allowedStatus,
+    subtotal,
+    discount: 0,
+    tax: 0,
+    total: subtotal,
+    deposit_due: depositDue,
+    content: { ...quote, eventRef: event.data.booking_ref, bookingRef: event.data.booking_ref }
+  };
+  if (quote.id && /^[0-9a-f-]{36}$/i.test(quote.id)) payload.id = quote.id;
+  return supabase.from('quotes').upsert(payload).select('*').single();
+}
+
 
 export async function submitBookingRequest(request) {
   // Public/anonymous users may insert a request but cannot select it back under RLS.
