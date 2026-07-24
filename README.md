@@ -1,6 +1,6 @@
-Galaxy Cue v10.3.4 — Form Engine Repair
+Galaxy Cue v10.4.0 — Event Workbook Workflow Foundation
 
-# Galaxy Cue OS v9.1.0
+# Galaxy Cue OS v10.4.0
 
 Business OS production milestone built on the separated Admin, Business and Client applications.
 
